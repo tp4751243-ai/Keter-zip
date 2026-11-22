@@ -1,0 +1,1864 @@
+/**
+ * Keter Project Persistence, Version History, Undo/Redo & Commercial Licensing Engine
+ * - Autosaves current state to localStorage with last-known-good backup and restores on startup
+ * - Validates and serializes native .keter.json editable project files (round-trip safe)
+ * - Tracks unsaved changes (dirty state) and protects against accidental data loss
+ * - Application-wide Undo/Redo History Manager preserving units, links, designSettings, rules, and page state
+ */
+
+import {
+  BookLayoutType,
+  ContentRole,
+  ContentUnit,
+  KneeCustomSettings,
+  LicenseStatus,
+  OrnamentAsset,
+  OrnamentUserRule,
+  PageGeometry,
+  ProjectSnapshot,
+  RavTextLink,
+} from '../types/typesetter';
+import {
+  LocalRuleOverride,
+  TypesettingRulesConfig,
+  TypesettingRulesEngine,
+  UserTypesettingRule,
+} from './typesetting-rules-engine';
+import { CustomLayoutDesign, ProfessionalDesignSettings } from '../types/design-settings';
+import { DesignSettingsEngine } from './design-settings-engine';
+import { DocxImporter } from './docx-importer';
+import type { AnchoredBreakInstruction } from './break-instructions';
+import JSZip from 'jszip';
+
+const AUTOSAVE_KEY = 'keter_autosave_state_v2';
+const AUTOSAVE_BACKUP_KEY = 'keter_autosave_last_known_good_v2';
+const HISTORY_KEY = 'keter_version_history_v2';
+const PRINT_VERSIONS_KEY = 'keter_print_versions_v1';
+/** Max frozen print versions kept in localStorage (oldest dropped first). */
+const MAX_PRINT_VERSIONS = 20;
+
+/**
+ * v0.3.0 — a frozen print version: a labelled, immutable snapshot of the
+ * whole project taken at the moment the user freezes it for printing.
+ * The snapshot is a deep copy: later edits never change it, so the PDF
+ * exporter can render from a frozen snapshot even after the live project
+ * has moved on (see the wiring snippet in the v0.3.0 report — the
+ * exporter itself is intentionally untouched here).
+ */
+export interface PrintVersion {
+  id: string;
+  label: string;
+  createdAt: number;
+  snapshot: ProjectSnapshot;
+}
+const RECENT_PROJECTS_KEY = 'keter_recent_projects_v1';
+const LICENSE_KEY = 'keter_commercial_license_v1';
+
+export interface RecentProjectItem {
+  projectId: string;
+  documentTitle: string;
+  fileName: string;
+  layoutType: BookLayoutType;
+  totalUnits: number;
+  updatedAt: number;
+  snapshot: ProjectSnapshot;
+}
+
+const VALID_LAYOUT_TYPES: ReadonlySet<BookLayoutType> = new Set<BookLayoutType>([
+  'rav_text',
+  'single_column',
+  'two_column',
+  'source_top_commentary_bottom',
+  'mikraot_gedolot',
+  // v0.5.0 Part C — Module 3: user-drawn text boxes over a base layout.
+  'custom_layout',
+]);
+
+const VALID_CONTENT_ROLES: ReadonlySet<ContentRole> = new Set<ContentRole>([
+  'book',
+  'main_title',
+  'subtitle',
+  'introduction',
+  'chapter',
+  'siman',
+  'seif',
+  'heading',
+  'subheading',
+  'main_source',
+  'verse',
+  'regular_paragraph',
+  'bold_special',
+  'primary_comment',
+  'secondary_comment',
+  'tertiary_comment',
+  'dibbur_hamatchil',
+  'footnote',
+  'side_note',
+  'cross_reference',
+  'ornament',
+  'continuation',
+  'page_element',
+  'table',
+  'image',
+  'chart',
+  'caption',
+  'list_item',
+]);
+
+export interface UndoRedoSnapshotState {
+  documentTitle: string;
+  layoutType: BookLayoutType;
+  geometry: PageGeometry;
+  contentUnits: ContentUnit[];
+  explicitLinks?: RavTextLink[];
+  kneeSettings: KneeCustomSettings;
+  sourceFontSize: number;
+  commentaryFontSize: number;
+  selectedFont: string;
+  selectedRashiFont: string;
+  selectedTosafotFont: string;
+  enableOrnaments: boolean;
+  currentPageIndex: number;
+  selectedOrnaments?: OrnamentAsset[];
+  ornamentRules?: OrnamentUserRule[];
+  projectRules?: UserTypesettingRule[];
+  localOverrides?: LocalRuleOverride[];
+  designSettings?: ProfessionalDesignSettings;
+  /**
+   * v0.6.0 (Part B) — anchored manual page-break instructions. Part of the
+   * snapshot state so splits are undoable, autosaved and stored in the
+   * .keter file (previously they lived only in App `useState` and were
+   * lost on reload — and never reached exports).
+   */
+  breakInstructions?: AnchoredBreakInstruction[];
+  projectMetadata?: {
+    projectId: string;
+    createdAt: number;
+    updatedAt: number;
+    lastSavedAt?: number;
+    appVersion: string;
+  };
+}
+
+export interface UndoRedoHistoryEntry {
+  id: string;
+  timestamp: number;
+  operationKey: string;
+  label: string;
+  state: UndoRedoSnapshotState;
+}
+
+export interface ProjectValidationResult {
+  valid: boolean;
+  snapshot?: ProjectSnapshot;
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Application-Wide Undo / Redo History Manager (Stage 4 & Stage 15)
+ * - Tracks complete document, formatting, layout, RavTextLink, knee, rules, and page state.
+ * - Coalesces rapid continuous edits with the same `operationKey` within `coalesceWindowMs`
+ *   so keystrokes or slider drags form a single logical undo step instead of flooding history.
+ * - Invalidates the Redo branch whenever a new edit is recorded after Undo.
+ * - Integrates with `ProjectPersistenceEngine.saveAutosave` for continuous persistence.
+ */
+export class UndoRedoHistoryManager {
+  private undoStack: UndoRedoHistoryEntry[] = [];
+  private redoStack: UndoRedoHistoryEntry[] = [];
+  private currentState: UndoRedoSnapshotState;
+  private savedBaselineState: UndoRedoSnapshotState;
+  private currentOperationKey: string = 'init';
+  private currentTimestamp: number = Date.now();
+  private readonly maxDepth: number;
+  private readonly coalesceWindowMs: number;
+
+  constructor(
+    initialState: UndoRedoSnapshotState,
+    maxDepth: number = 500,
+    coalesceWindowMs: number = 900
+  ) {
+    this.currentState = UndoRedoHistoryManager.cloneState(initialState);
+    this.savedBaselineState = UndoRedoHistoryManager.cloneState(initialState);
+    this.maxDepth = maxDepth;
+    this.coalesceWindowMs = coalesceWindowMs;
+  }
+
+  public static cloneState(state: UndoRedoSnapshotState): UndoRedoSnapshotState {
+    return JSON.parse(JSON.stringify(state)) as UndoRedoSnapshotState;
+  }
+
+  public static statesAreEqual(a: UndoRedoSnapshotState, b: UndoRedoSnapshotState): boolean {
+    const normalize = (s: UndoRedoSnapshotState) => ({
+      documentTitle: s.documentTitle,
+      layoutType: s.layoutType,
+      geometry: s.geometry,
+      contentUnits: s.contentUnits,
+      explicitLinks: s.explicitLinks ?? [],
+      kneeSettings: s.kneeSettings,
+      sourceFontSize: s.sourceFontSize,
+      commentaryFontSize: s.commentaryFontSize,
+      selectedFont: s.selectedFont,
+      selectedRashiFont: s.selectedRashiFont,
+      selectedTosafotFont: s.selectedTosafotFont,
+      enableOrnaments: s.enableOrnaments,
+      selectedOrnaments: s.selectedOrnaments ?? [],
+      ornamentRules: s.ornamentRules ?? [],
+      projectRules: s.projectRules ?? [],
+      localOverrides: s.localOverrides ?? [],
+      // v0.6.0 (Part B): a split changes the dirty state too.
+      breakInstructions: s.breakInstructions ?? [],
+      designSettings: s.designSettings
+        ? {
+            layoutType: s.designSettings.layoutType,
+            pageLayout: s.designSettings.pageLayout,
+            columns: s.designSettings.columns,
+            pageElements: s.designSettings.pageElements,
+            ravText: s.designSettings.ravText,
+            footnotes: s.designSettings.footnotes,
+            projectRoleStyles: s.designSettings.projectRoleStyles,
+            localOverrides: s.designSettings.localOverrides,
+            localUnitOverrides: s.designSettings.localUnitOverrides,
+            localWordOverrides: s.designSettings.localWordOverrides,
+          }
+        : null,
+    });
+    return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+  }
+
+  public static toProjectSnapshot(
+    state: UndoRedoSnapshotState,
+    label: string = 'שמירה אוטומטית'
+  ): ProjectSnapshot {
+    const now = Date.now();
+    return {
+      id: state.projectMetadata?.projectId || `snap-${now}`,
+      label,
+      timestamp: now,
+      documentTitle: state.documentTitle,
+      layoutType: state.layoutType,
+      geometry: JSON.parse(JSON.stringify(state.geometry)),
+      units: JSON.parse(JSON.stringify(state.contentUnits)),
+      links: state.explicitLinks ? JSON.parse(JSON.stringify(state.explicitLinks)) : [],
+      kneeSettings: JSON.parse(JSON.stringify(state.kneeSettings)),
+      sourceFontSize: state.sourceFontSize,
+      commentaryFontSize: state.commentaryFontSize,
+      selectedFont: state.selectedFont,
+      selectedRashiFont: state.selectedRashiFont,
+      selectedTosafotFont: state.selectedTosafotFont,
+      enableOrnaments: state.enableOrnaments,
+      currentPageIndex: state.currentPageIndex,
+      selectedOrnaments: state.selectedOrnaments
+        ? JSON.parse(JSON.stringify(state.selectedOrnaments))
+        : [],
+      ornamentRules: state.ornamentRules
+        ? JSON.parse(JSON.stringify(state.ornamentRules))
+        : [],
+      projectRules: state.projectRules ? JSON.parse(JSON.stringify(state.projectRules)) : [],
+      localOverrides: state.localOverrides ? JSON.parse(JSON.stringify(state.localOverrides)) : [],
+      // v0.6.0 (Part B): manual page breaks survive save / reload / export.
+      breakInstructions: state.breakInstructions
+        ? JSON.parse(JSON.stringify(state.breakInstructions))
+        : [],
+      designSettings: state.designSettings
+        ? JSON.parse(JSON.stringify(state.designSettings))
+        : undefined,
+      projectMetadata: {
+        projectId:
+          state.projectMetadata?.projectId ||
+          state.designSettings?.projectId ||
+          `project-${now}`,
+        createdAt: state.projectMetadata?.createdAt || now,
+        updatedAt: now,
+        lastSavedAt: state.projectMetadata?.lastSavedAt,
+        appVersion: '2.5.0-stage15',
+      },
+    };
+  }
+
+  public static fromProjectSnapshot(snapshot: ProjectSnapshot): UndoRedoSnapshotState {
+    const restoredDesign = ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(snapshot);
+    const geometry: PageGeometry =
+      snapshot.geometry ||
+      restoredDesign.pageLayout?.geometry || {
+        pageWidth: 482.0,
+        pageHeight: 680.0,
+        marginTop: 48.0,
+        marginBottom: 48.0,
+        marginInside: 46.0,
+        marginOutside: 42.0,
+        isVerso: false,
+      };
+
+    return {
+      documentTitle: snapshot.documentTitle,
+      layoutType: snapshot.layoutType,
+      geometry: JSON.parse(JSON.stringify(geometry)),
+      contentUnits: JSON.parse(JSON.stringify(snapshot.units)),
+      explicitLinks: Array.isArray(snapshot.links)
+        ? JSON.parse(JSON.stringify(snapshot.links))
+        : [],
+      kneeSettings: snapshot.kneeSettings
+        ? JSON.parse(JSON.stringify(snapshot.kneeSettings))
+        : {
+            mode: 'auto',
+            upperKneeLines: 4,
+            junctionPercent: 50,
+            lowerWidthPercent: 72,
+            stepDirection: 'auto',
+            gutterWidth: 12,
+          },
+      sourceFontSize:
+        snapshot.sourceFontSize ??
+        restoredDesign.roleStyles?.main_source?.character?.fontSizePt ??
+        14.5,
+      commentaryFontSize:
+        snapshot.commentaryFontSize ??
+        restoredDesign.roleStyles?.primary_comment?.character?.fontSizePt ??
+        10.5,
+      selectedFont:
+        snapshot.selectedFont ||
+        restoredDesign.roleStyles?.main_source?.character?.fontFamily ||
+        'Frank Ruhl Libre',
+      selectedRashiFont:
+        snapshot.selectedRashiFont ||
+        restoredDesign.roleStyles?.primary_comment?.character?.fontFamily ||
+        'Noto Rashi Hebrew',
+      selectedTosafotFont:
+        snapshot.selectedTosafotFont ||
+        restoredDesign.roleStyles?.secondary_comment?.character?.fontFamily ||
+        'Frank Ruhl Libre',
+      enableOrnaments: snapshot.enableOrnaments ?? true,
+      currentPageIndex: snapshot.currentPageIndex ?? 0,
+      selectedOrnaments: Array.isArray(snapshot.selectedOrnaments)
+        ? JSON.parse(JSON.stringify(snapshot.selectedOrnaments))
+        : [],
+      ornamentRules: Array.isArray(snapshot.ornamentRules)
+        ? JSON.parse(JSON.stringify(snapshot.ornamentRules))
+        : [],
+      projectRules: Array.isArray(snapshot.projectRules)
+        ? JSON.parse(JSON.stringify(snapshot.projectRules))
+        : [],
+      localOverrides: Array.isArray(snapshot.localOverrides)
+        ? JSON.parse(JSON.stringify(snapshot.localOverrides))
+        : [],
+      // v0.6.0 (Part B): restore manual page breaks (missing = none, so
+      // projects saved before v0.6.0 load unchanged).
+      breakInstructions: Array.isArray(snapshot.breakInstructions)
+        ? JSON.parse(JSON.stringify(snapshot.breakInstructions))
+        : [],
+      designSettings: restoredDesign,
+      projectMetadata: snapshot.projectMetadata
+        ? JSON.parse(JSON.stringify(snapshot.projectMetadata))
+        : {
+            projectId: snapshot.id || `project-${snapshot.timestamp || Date.now()}`,
+            createdAt: snapshot.timestamp || Date.now(),
+            updatedAt: snapshot.timestamp || Date.now(),
+            appVersion: '2.5.0-stage15',
+          },
+    };
+  }
+
+  public recordChange(
+    nextState: UndoRedoSnapshotState,
+    label: string,
+    operationKey: string = 'edit',
+    allowCoalesce: boolean = true,
+    now: number = Date.now()
+  ): boolean {
+    if (UndoRedoHistoryManager.statesAreEqual(this.currentState, nextState)) {
+      this.currentState = UndoRedoHistoryManager.cloneState(nextState);
+      return false;
+    }
+
+    const canCoalesce =
+      allowCoalesce &&
+      this.undoStack.length > 0 &&
+      this.redoStack.length === 0 &&
+      this.currentOperationKey === operationKey &&
+      now - this.currentTimestamp <= this.coalesceWindowMs;
+
+    if (!canCoalesce) {
+      this.undoStack.push({
+        id: `undo-${now}-${Math.random().toString(36).slice(2, 6)}`,
+        timestamp: this.currentTimestamp,
+        operationKey,
+        label,
+        state: UndoRedoHistoryManager.cloneState(this.currentState),
+      });
+      if (this.undoStack.length > this.maxDepth) {
+        this.undoStack.shift();
+      }
+    }
+
+    // Any new edit after Undo invalidates the Redo branch
+    this.redoStack = [];
+    this.currentState = UndoRedoHistoryManager.cloneState(nextState);
+    this.currentOperationKey = operationKey;
+    this.currentTimestamp = now;
+
+    ProjectPersistenceEngine.saveAutosave(
+      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, label)
+    );
+    return true;
+  }
+
+  /**
+   * Resets history stacks and sets a new clean baseline when starting a new document,
+   * opening a `.keter.json` project, or completing a full document replacement.
+   */
+  public resetForNewProject(state: UndoRedoSnapshotState, label: string = 'פרויקט חדש'): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.currentState = UndoRedoHistoryManager.cloneState(state);
+    this.savedBaselineState = UndoRedoHistoryManager.cloneState(state);
+    this.currentOperationKey = 'init';
+    this.currentTimestamp = Date.now();
+    ProjectPersistenceEngine.saveAutosave(
+      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, label)
+    );
+  }
+
+  public reset(state: UndoRedoSnapshotState, label: string = 'פרויקט חדש'): void {
+    this.resetForNewProject(state, label);
+  }
+
+  /**
+   * Marks the current state as saved to disk (clears unsaved changes indicator)
+   */
+  public markSaved(state?: UndoRedoSnapshotState): void {
+    if (state) {
+      this.currentState = UndoRedoHistoryManager.cloneState(state);
+    }
+    this.savedBaselineState = UndoRedoHistoryManager.cloneState(this.currentState);
+  }
+
+  /**
+   * Returns true if the current project state differs from the last saved/opened baseline
+   */
+  public hasUnsavedChanges(candidateState?: UndoRedoSnapshotState): boolean {
+    const target = candidateState ?? this.currentState;
+    return !UndoRedoHistoryManager.statesAreEqual(this.savedBaselineState, target);
+  }
+
+  public canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  public canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  public getUndoCount(): number {
+    return this.undoStack.length;
+  }
+
+  public getRedoCount(): number {
+    return this.redoStack.length;
+  }
+
+  /**
+   * v0.3.0 — named-history accessor for the history panel.
+   * Returns every undoable step (oldest → newest) as { label, timestamp },
+   * plus the current state as the final entry, so the panel can list the
+   * full 500-step history by name without exposing the stored states.
+   */
+  public listHistoryLabels(): { label: string; timestamp: number }[] {
+    const entries = this.undoStack.map(e => ({ label: e.label, timestamp: e.timestamp }));
+    entries.push({ label: 'מצב נוכחי', timestamp: this.currentTimestamp });
+    return entries;
+  }
+
+  /**
+   * v0.3.0 — number of undo steps currently retained (max 500 by default).
+   */
+  public getMaxDepth(): number {
+    return this.maxDepth;
+  }
+
+  public getLastUndoLabel(): string | undefined {
+    return this.undoStack.length > 0
+      ? this.undoStack[this.undoStack.length - 1].label
+      : undefined;
+  }
+
+  public getLastRedoLabel(): string | undefined {
+    return this.redoStack.length > 0
+      ? this.redoStack[this.redoStack.length - 1].label
+      : undefined;
+  }
+
+  public undo(): UndoRedoSnapshotState | null {
+    if (this.undoStack.length === 0) return null;
+    const prevEntry = this.undoStack.pop()!;
+    this.redoStack.push({
+      id: `redo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: Date.now(),
+      operationKey: prevEntry.operationKey,
+      label: prevEntry.label,
+      state: UndoRedoHistoryManager.cloneState(this.currentState),
+    });
+    this.currentState = UndoRedoHistoryManager.cloneState(prevEntry.state);
+    this.currentOperationKey = 'undo';
+    this.currentTimestamp = 0;
+
+    ProjectPersistenceEngine.saveAutosave(
+      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, `ביטול: ${prevEntry.label}`)
+    );
+    return UndoRedoHistoryManager.cloneState(this.currentState);
+  }
+
+  public redo(): UndoRedoSnapshotState | null {
+    if (this.redoStack.length === 0) return null;
+    const nextEntry = this.redoStack.pop()!;
+    this.undoStack.push({
+      id: `undo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: Date.now(),
+      operationKey: nextEntry.operationKey,
+      label: nextEntry.label,
+      state: UndoRedoHistoryManager.cloneState(this.currentState),
+    });
+    this.currentState = UndoRedoHistoryManager.cloneState(nextEntry.state);
+    this.currentOperationKey = 'redo';
+    this.currentTimestamp = 0;
+
+    ProjectPersistenceEngine.saveAutosave(
+      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, `ביצוע מחדש: ${nextEntry.label}`)
+    );
+    return UndoRedoHistoryManager.cloneState(this.currentState);
+  }
+
+  public getCurrentState(): UndoRedoSnapshotState {
+    return UndoRedoHistoryManager.cloneState(this.currentState);
+  }
+}
+
+export class ProjectPersistenceEngine {
+  /**
+   * Performs strict structural and semantic validation on an imported or autosaved project payload.
+   * Never mutates the original source text or paragraph boundaries.
+   */
+  public static validateProjectPayload(rawPayload: unknown): ProjectValidationResult {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!rawPayload || typeof rawPayload !== 'object') {
+      return {
+        valid: false,
+        errors: ['קובץ הפרויקט ריק או אינו אובייקט JSON תקין.'],
+        warnings,
+      };
+    }
+
+    const obj = rawPayload as Record<string, any>;
+
+    // Check appSignature if present
+    if (
+      obj.appSignature !== undefined &&
+      obj.appSignature !== 'KeterTypesetterCommercial' &&
+      obj.appSignature !== 'KeterTypesetter'
+    ) {
+      return {
+        valid: false,
+        errors: [`חתימת יישום לא מזוהה בקובץ הפרויקט: "${String(obj.appSignature)}".`],
+        warnings,
+      };
+    }
+
+    // Check format / formatVersion if present
+    if (
+      obj.format !== undefined &&
+      obj.format !== 'KETER_PROJECT_V2' &&
+      obj.format !== 'KETER_PROJECT_V1'
+    ) {
+      return {
+        valid: false,
+        errors: [`פורמט קובץ פרויקט לא נתמך או לא תואם: "${String(obj.format)}".`],
+        warnings,
+      };
+    }
+
+    if (
+      obj.formatVersion !== undefined &&
+      obj.formatVersion !== '1.0.0' &&
+      obj.formatVersion !== '2.0.0' &&
+      obj.formatVersion !== '2.5.0'
+    ) {
+      return {
+        valid: false,
+        errors: [`גרסת פורמט קובץ פרויקט אינה נתמכת: "${String(obj.formatVersion)}".`],
+        warnings,
+      };
+    }
+
+    const candidate: Record<string, any> =
+      obj.snapshot && typeof obj.snapshot === 'object' ? obj.snapshot : obj;
+
+    if (!candidate.documentTitle || typeof candidate.documentTitle !== 'string') {
+      errors.push('חסרה כותרת מסמך תקינה (documentTitle) בקובץ הפרויקט.');
+    }
+
+    if (
+      !candidate.layoutType ||
+      !VALID_LAYOUT_TYPES.has(candidate.layoutType as BookLayoutType)
+    ) {
+      errors.push(
+        `סוג תבנית עימוד (layoutType="${String(candidate.layoutType)}") חסר או אינו נתמך.`
+      );
+    }
+
+    if (!Array.isArray(candidate.units) || candidate.units.length === 0) {
+      errors.push('קובץ הפרויקט אינו מכיל יחידות תוכן (units) תקינות.');
+    } else {
+      const seenUnitIds = new Set<string>();
+      for (let i = 0; i < candidate.units.length; i++) {
+        const u = candidate.units[i];
+        if (!u || typeof u !== 'object') {
+          errors.push(`יחידת תוכן מספר ${i + 1} פגומה.`);
+          continue;
+        }
+        if (!u.id || typeof u.id !== 'string') {
+          errors.push(`ליחידת תוכן מספר ${i + 1} חסר מזהה ייחודי (id).`);
+        } else if (seenUnitIds.has(u.id)) {
+          errors.push(`מזהה יחידת תוכן כפול נמצא בקובץ: "${u.id}".`);
+        } else {
+          seenUnitIds.add(u.id);
+        }
+
+        if (!u.role || !VALID_CONTENT_ROLES.has(u.role as ContentRole)) {
+          errors.push(`תפקיד סמנטי לא חוקי (${String(u.role)}) ביחידה "${u.id || i}".`);
+        }
+
+        if (typeof u.rawText !== 'string') {
+          errors.push(`טקסט המקור (rawText) ביחידה "${u.id || i}" חסר או שאינו מחרוזת.`);
+        }
+      }
+
+      // Validate links if present
+      if (candidate.links !== undefined) {
+        if (!Array.isArray(candidate.links)) {
+          errors.push('רשימת קישורי הרב-טקסט (links) אינה במבנה מערך תקין.');
+        } else {
+          for (let j = 0; j < candidate.links.length; j++) {
+            const lnk = candidate.links[j];
+            if (!lnk || typeof lnk !== 'object' || !lnk.sourceUnitId || !lnk.commentaryUnitId) {
+              errors.push(`קישור רב-טקסט מספר ${j + 1} חסר שדות חובה (sourceUnitId / commentaryUnitId).`);
+            } else if (
+              !seenUnitIds.has(lnk.sourceUnitId) ||
+              !seenUnitIds.has(lnk.commentaryUnitId)
+            ) {
+              warnings.push(
+                `קישור "${lnk.linkId || j}" מפנה ליחידת תוכן שלא נמצאה (${lnk.sourceUnitId} -> ${lnk.commentaryUnitId}).`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      return { valid: false, errors, warnings };
+    }
+
+    // Reconstruct validated ProjectSnapshot preserving 100% of unit texts, runs, footnotes, links, rules, and design settings
+    const validatedDesign = this.buildDesignSettingsFromSnapshot(candidate as ProjectSnapshot);
+    const geometry: PageGeometry =
+      candidate.geometry &&
+      typeof candidate.geometry.pageWidth === 'number' &&
+      typeof candidate.geometry.pageHeight === 'number'
+        ? candidate.geometry
+        : validatedDesign.pageLayout.geometry;
+
+    const normalizedSnapshot: ProjectSnapshot = {
+      id: typeof candidate.id === 'string' && candidate.id ? candidate.id : `snap-${Date.now()}`,
+      timestamp: typeof candidate.timestamp === 'number' ? candidate.timestamp : Date.now(),
+      label: typeof candidate.label === 'string' ? candidate.label : 'פרויקט שמור',
+      documentTitle: candidate.documentTitle,
+      layoutType: candidate.layoutType as BookLayoutType,
+      geometry: JSON.parse(JSON.stringify(geometry)),
+      units: JSON.parse(JSON.stringify(candidate.units)),
+      links: Array.isArray(candidate.links) ? JSON.parse(JSON.stringify(candidate.links)) : [],
+      kneeSettings:
+        candidate.kneeSettings && typeof candidate.kneeSettings === 'object'
+          ? JSON.parse(JSON.stringify(candidate.kneeSettings))
+          : validatedDesign.ravText.kneeSettings,
+      sourceFontSize:
+        typeof candidate.sourceFontSize === 'number'
+          ? candidate.sourceFontSize
+          : validatedDesign.roleStyles.main_source.character.fontSizePt,
+      commentaryFontSize:
+        typeof candidate.commentaryFontSize === 'number'
+          ? candidate.commentaryFontSize
+          : validatedDesign.roleStyles.primary_comment.character.fontSizePt,
+      selectedFont:
+        typeof candidate.selectedFont === 'string' && candidate.selectedFont
+          ? candidate.selectedFont
+          : validatedDesign.roleStyles.main_source.character.fontFamily,
+      selectedRashiFont:
+        typeof candidate.selectedRashiFont === 'string' && candidate.selectedRashiFont
+          ? candidate.selectedRashiFont
+          : validatedDesign.roleStyles.primary_comment.character.fontFamily,
+      selectedTosafotFont:
+        typeof candidate.selectedTosafotFont === 'string' && candidate.selectedTosafotFont
+          ? candidate.selectedTosafotFont
+          : validatedDesign.roleStyles.secondary_comment.character.fontFamily,
+      enableOrnaments:
+        typeof candidate.enableOrnaments === 'boolean' ? candidate.enableOrnaments : true,
+      currentPageIndex:
+        typeof candidate.currentPageIndex === 'number' && candidate.currentPageIndex >= 0
+          ? candidate.currentPageIndex
+          : 0,
+      selectedOrnaments: Array.isArray(candidate.selectedOrnaments)
+        ? JSON.parse(JSON.stringify(candidate.selectedOrnaments))
+        : [],
+      ornamentRules: Array.isArray(candidate.ornamentRules)
+        ? JSON.parse(JSON.stringify(candidate.ornamentRules))
+        : [],
+      projectRules: Array.isArray(candidate.projectRules)
+        ? JSON.parse(JSON.stringify(candidate.projectRules))
+        : [],
+      localOverrides: Array.isArray(candidate.localOverrides)
+        ? JSON.parse(JSON.stringify(candidate.localOverrides))
+        : [],
+      designSettings: validatedDesign,
+      projectMetadata:
+        candidate.projectMetadata && typeof candidate.projectMetadata === 'object'
+          ? JSON.parse(JSON.stringify(candidate.projectMetadata))
+          : {
+              projectId: candidate.id || `project-${Date.now()}`,
+              createdAt: candidate.timestamp || Date.now(),
+              updatedAt: Date.now(),
+              appVersion: '2.5.0-stage15',
+            },
+    };
+
+    return {
+      valid: true,
+      snapshot: normalizedSnapshot,
+      errors: [],
+      warnings,
+    };
+  }
+
+  /**
+   * Autosaves the current project snapshot safely.
+   * Validates the snapshot before writing, and preserves the last known good version in
+   * `AUTOSAVE_BACKUP_KEY` so a failed or corrupted write never loses user work.
+   */
+  public static saveAutosave(snapshot: ProjectSnapshot): boolean {
+    const validation = this.validateProjectPayload(snapshot);
+    if (!validation.valid || !validation.snapshot) {
+      return false;
+    }
+
+    try {
+      let rotatedBackup = false;
+      const previousGood = localStorage.getItem(AUTOSAVE_KEY);
+      if (previousGood) {
+        try {
+          const prevParsed = JSON.parse(previousGood);
+          if (this.validateProjectPayload(prevParsed).valid) {
+            localStorage.setItem(AUTOSAVE_BACKUP_KEY, previousGood);
+            rotatedBackup = true;
+          }
+        } catch {
+          // Keep existing backup untouched if previous primary was corrupted
+        }
+      }
+
+      const serialized = JSON.stringify(validation.snapshot);
+      localStorage.setItem(AUTOSAVE_KEY, serialized);
+      if (!rotatedBackup && !localStorage.getItem(AUTOSAVE_BACKUP_KEY)) {
+        localStorage.setItem(AUTOSAVE_BACKUP_KEY, serialized);
+      }
+      return true;
+    } catch {
+      // If saving fails (e.g. quota exceeded), the previous AUTOSAVE_KEY / AUTOSAVE_BACKUP_KEY remains intact
+      return false;
+    }
+  }
+
+  /**
+   * Loads the last valid autosaved project state on startup along with recovery metadata.
+   * Automatically falls back to `AUTOSAVE_BACKUP_KEY` if the primary autosave was corrupted.
+   */
+  public static loadAutosaveWithRecovery(): {
+    snapshot: ProjectSnapshot | null;
+    recoveredFromBackup: boolean;
+  } {
+    try {
+      const rawPrimary = localStorage.getItem(AUTOSAVE_KEY);
+      if (rawPrimary) {
+        try {
+          const parsedPrimary = JSON.parse(rawPrimary);
+          const validated = this.validateProjectPayload(parsedPrimary);
+          if (validated.valid && validated.snapshot) {
+            return { snapshot: validated.snapshot, recoveredFromBackup: false };
+          }
+        } catch {
+          // Primary JSON invalid — fall through to backup
+        }
+      }
+
+      const rawBackup = localStorage.getItem(AUTOSAVE_BACKUP_KEY);
+      if (rawBackup) {
+        const parsedBackup = JSON.parse(rawBackup);
+        const validatedBackup = this.validateProjectPayload(parsedBackup);
+        if (validatedBackup.valid && validatedBackup.snapshot) {
+          localStorage.setItem(AUTOSAVE_KEY, rawBackup);
+          return { snapshot: validatedBackup.snapshot, recoveredFromBackup: true };
+        }
+      }
+
+      return { snapshot: null, recoveredFromBackup: false };
+    } catch {
+      return { snapshot: null, recoveredFromBackup: false };
+    }
+  }
+
+  /**
+   * Loads the last valid autosaved project state on startup.
+   * Automatically falls back to `AUTOSAVE_BACKUP_KEY` if the primary autosave was corrupted.
+   */
+  public static loadAutosave(): ProjectSnapshot | null {
+    return this.loadAutosaveWithRecovery().snapshot;
+  }
+
+  /**
+   * Compares a current ProjectSnapshot against a saved baseline ProjectSnapshot
+   * to determine whether the project has unsaved changes.
+   */
+  public static isSnapshotDirty(
+    current: ProjectSnapshot | null | undefined,
+    savedBaseline: ProjectSnapshot | null | undefined
+  ): boolean {
+    if (!current || !savedBaseline) return false;
+    const stateA = UndoRedoHistoryManager.fromProjectSnapshot(current);
+    const stateB = UndoRedoHistoryManager.fromProjectSnapshot(savedBaseline);
+    return !UndoRedoHistoryManager.statesAreEqual(stateA, stateB);
+  }
+
+  /**
+   * Clears autosave storage (used in isolated tests or explicit reset)
+   */
+  public static clearAutosave(): void {
+    try {
+      localStorage.removeItem(AUTOSAVE_KEY);
+      localStorage.removeItem(AUTOSAVE_BACKUP_KEY);
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Returns saved version history snapshots
+   */
+  public static getVersionHistory(): ProjectSnapshot[] {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw) as ProjectSnapshot[];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Saves a named snapshot to version history (keeps up to 25 snapshots)
+   */
+  public static saveVersionSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot[] {
+    const history = this.getVersionHistory();
+    const updated = [snapshot, ...history.filter(h => h.id !== snapshot.id)].slice(0, 25);
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+    } catch {
+      // Ignore storage quota exceptions
+    }
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // v0.3.0 — Frozen print versions
+  // A frozen print version is a labelled, deep-copied ProjectSnapshot stored
+  // under its own localStorage key. Freezing never touches the live project
+  // or the undo history, and later edits can never change a frozen version.
+  // The PDF exporter can render from `version.snapshot` even after the
+  // project has been edited further (see the v0.3.0 wiring snippet — the
+  // exporter itself is intentionally not edited here).
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Freezes the given project snapshot as a labelled print version.
+   * Pass `UndoRedoHistoryManager.toProjectSnapshot(state, label)` from App.
+   * Returns the stored PrintVersion { id, label, createdAt, snapshot }.
+   */
+  public static freezePrintVersion(
+    snapshot: ProjectSnapshot,
+    label: string
+  ): PrintVersion {
+    const now = Date.now();
+    const version: PrintVersion = {
+      id: `print-${now}-${Math.random().toString(36).slice(2, 6)}`,
+      label: label.trim() || 'גרסת דפוס',
+      createdAt: now,
+      // Deep copy so later edits can never mutate the frozen version.
+      snapshot: JSON.parse(JSON.stringify(snapshot)) as ProjectSnapshot,
+    };
+    version.snapshot.label = version.label;
+    const versions = [version, ...this.listPrintVersions()].slice(0, MAX_PRINT_VERSIONS);
+    try {
+      localStorage.setItem(PRINT_VERSIONS_KEY, JSON.stringify(versions));
+    } catch {
+      // Ignore storage quota exceptions (frozen versions are best-effort)
+    }
+    return version;
+  }
+
+  /** Returns all frozen print versions, newest first. */
+  public static listPrintVersions(): PrintVersion[] {
+    try {
+      const raw = localStorage.getItem(PRINT_VERSIONS_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw) as PrintVersion[];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Returns one frozen print version by id, or null if it does not exist. */
+  public static getPrintVersion(id: string): PrintVersion | null {
+    return this.listPrintVersions().find(v => v.id === id) ?? null;
+  }
+
+  /** Deletes a frozen print version by id. Returns true if one was removed. */
+  public static deletePrintVersion(id: string): boolean {
+    const versions = this.listPrintVersions();
+    const kept = versions.filter(v => v.id !== id);
+    if (kept.length === versions.length) return false;
+    try {
+      localStorage.setItem(PRINT_VERSIONS_KEY, JSON.stringify(kept));
+    } catch {
+      // Ignore storage quota exceptions
+    }
+    return true;
+  }
+
+  /**
+   * Builds a `TypesettingRulesConfig` from a restored `ProjectSnapshot` combined with
+   * the persistent global `UserRuleSet` without mutating global defaults.
+   */
+  public static buildRulesConfigFromSnapshot(
+    snapshot: ProjectSnapshot | null | undefined,
+    customGlobalUserRules?: UserTypesettingRule[]
+  ): TypesettingRulesConfig {
+    return TypesettingRulesEngine.createConfig({
+      projectId: snapshot?.id,
+      userRules: customGlobalUserRules,
+      projectRules: Array.isArray(snapshot?.projectRules)
+        ? (snapshot!.projectRules as UserTypesettingRule[])
+        : [],
+      localOverrides: Array.isArray(snapshot?.localOverrides)
+        ? (snapshot!.localOverrides as LocalRuleOverride[])
+        : [],
+    });
+  }
+
+  /**
+   * Restores or initializes `ProfessionalDesignSettings` from a `ProjectSnapshot`.
+   */
+  public static buildDesignSettingsFromSnapshot(
+    snapshot: ProjectSnapshot | null | undefined
+  ): ProfessionalDesignSettings {
+    if (snapshot?.designSettings && typeof snapshot.designSettings === 'object') {
+      return DesignSettingsEngine.sanitizeAndEnforceHardRules(
+        snapshot.designSettings as ProfessionalDesignSettings
+      ).settings;
+    }
+    return DesignSettingsEngine.createDefaultSettings({
+      layoutType: snapshot?.layoutType,
+      geometry: snapshot?.geometry,
+      kneeSettings: snapshot?.kneeSettings,
+      sourceFontFamily: snapshot?.selectedFont,
+      rashiFontFamily: snapshot?.selectedRashiFont,
+      tosafotFontFamily: snapshot?.selectedTosafotFont,
+      sourceFontSizePt: snapshot?.sourceFontSize,
+      commentaryFontSizePt: snapshot?.commentaryFontSize,
+    });
+  }
+
+  /**
+   * Serializes a project snapshot to a structured ZIP-based `.keter` archive Blob.
+   * Archive layout:
+   *  - manifest.json: archive metadata, version, document title, layout type, file list
+   *  - project.json: complete authoritative ProjectSnapshot
+   *  - document/units.json: individual units array
+   *  - styles/design.json: typography & styling rules
+   */
+  public static async serializeKeterArchiveZip(snapshot: ProjectSnapshot): Promise<Blob> {
+    const validation = this.validateProjectPayload(snapshot);
+    const cleanSnapshot = validation.valid && validation.snapshot ? validation.snapshot : snapshot;
+
+    const zip = new JSZip();
+
+    const manifest = {
+      format: 'KETER_ARCHIVE_ZIP_V1',
+      appSignature: 'KeterTypesetterCommercial',
+      formatVersion: '3.0.0',
+      exportedAt: new Date().toISOString(),
+      documentTitle: cleanSnapshot.documentTitle,
+      layoutType: cleanSnapshot.layoutType,
+      unitCount: cleanSnapshot.units?.length ?? 0,
+      linkCount: cleanSnapshot.links?.length ?? 0,
+      generator: 'Keter Typesetter Studio v2.6.0',
+      contents: [
+        'manifest.json',
+        'project.json',
+        'document/units.json',
+        'document/links.json',
+        'styles/design.json',
+      ],
+    };
+
+    zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+    zip.file('project.json', this.serializeKeterProject(cleanSnapshot));
+    zip.file('document/units.json', JSON.stringify(cleanSnapshot.units, null, 2));
+    zip.file('document/links.json', JSON.stringify(cleanSnapshot.links || [], null, 2));
+    zip.file(
+      'styles/design.json',
+      JSON.stringify(
+        {
+          designSettings: cleanSnapshot.designSettings,
+          geometry: cleanSnapshot.geometry,
+          kneeSettings: cleanSnapshot.kneeSettings,
+          selectedFont: cleanSnapshot.selectedFont,
+          selectedRashiFont: cleanSnapshot.selectedRashiFont,
+          selectedTosafotFont: cleanSnapshot.selectedTosafotFont,
+          projectRules: cleanSnapshot.projectRules || [],
+          localOverrides: cleanSnapshot.localOverrides || [],
+          ornaments: cleanSnapshot.selectedOrnaments || [],
+          ornamentRules: cleanSnapshot.ornamentRules || [],
+        },
+        null,
+        2
+      )
+    );
+
+    return zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+      mimeType: 'application/x-keter-project',
+    });
+  }
+
+  /**
+   * Deserializes either a modern structured ZIP `.keter` archive or a legacy JSON `.keter`/`.keter.json`
+   */
+  public static async deserializeKeterArchive(data: ArrayBuffer | Blob | string): Promise<ProjectSnapshot> {
+    // 1. If string passed, parse as JSON
+    if (typeof data === 'string') {
+      return this.deserializeKeterProject(data);
+    }
+
+    // 2. Try loading as ZIP archive via JSZip
+    try {
+      const zip = await JSZip.loadAsync(data);
+      const projectJsonFile = zip.file('project.json');
+      if (projectJsonFile) {
+        const text = await projectJsonFile.async('string');
+        return this.deserializeKeterProject(text);
+      }
+      // If manifest exists but project.json missing, attempt fallback extraction
+      const manifestFile = zip.file('manifest.json');
+      if (manifestFile) {
+        const manifestText = await manifestFile.async('string');
+        const manifest = JSON.parse(manifestText);
+        const unitsFile = zip.file('document/units.json');
+        if (unitsFile) {
+          const unitsText = await unitsFile.async('string');
+          const units = JSON.parse(unitsText);
+          const linksFile = zip.file('document/links.json');
+          const linksText = linksFile ? await linksFile.async('string') : '[]';
+          const links = JSON.parse(linksText);
+          return this.createNewProjectSnapshot({
+            documentTitle: manifest.documentTitle || 'פרויקט משוחזר',
+            layoutType: manifest.layoutType || 'rav_text',
+            units,
+            links,
+          });
+        }
+      }
+    } catch {
+      // Not a valid ZIP file — fall through to text JSON parsing
+    }
+
+    // 3. Fallback: treat buffer/blob as UTF-8 JSON text (existing .keter or .keter.json)
+    let text = '';
+    if (data instanceof Blob) {
+      text = await data.text();
+    } else {
+      text = new TextDecoder('utf-8').decode(data);
+    }
+    return this.deserializeKeterProject(text);
+  }
+
+  /**
+   * Serializes a project snapshot to a JSON string in `.keter.json` format
+   */
+  public static serializeKeterProject(snapshot: ProjectSnapshot): string {
+    const validation = this.validateProjectPayload(snapshot);
+    const cleanSnapshot = validation.valid && validation.snapshot ? validation.snapshot : snapshot;
+    const payload = {
+      appSignature: 'KeterTypesetterCommercial',
+      format: 'KETER_PROJECT_V2',
+      formatVersion: '2.5.0',
+      version: '2.5.0',
+      exportedAt: new Date().toISOString(),
+      snapshot: cleanSnapshot,
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  public static exportKeterProjectJson(snapshot: ProjectSnapshot): string {
+    return this.serializeKeterProject(snapshot);
+  }
+
+  /**
+   * Validates and parses a `.keter.json` string without throwing, returning `{ valid, snapshot, errorHe, errors, warnings }`
+   */
+  public static validateAndParseProjectJson(jsonText: string): {
+    valid: boolean;
+    snapshot?: ProjectSnapshot;
+    errorHe?: string;
+    errors: string[];
+    warnings: string[];
+  } {
+    if (!jsonText || typeof jsonText !== 'string' || !jsonText.trim()) {
+      const msg = 'קובץ הפרויקט ריק או שאינו ניתן לקריאה.';
+      return { valid: false, errorHe: msg, errors: [msg], warnings: [] };
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      const msg = 'קובץ הפרויקט פגום ואינו בפורמט JSON תקין.';
+      return { valid: false, errorHe: msg, errors: [msg], warnings: [] };
+    }
+
+    const validation = this.validateProjectPayload(parsed);
+    if (!validation.valid || !validation.snapshot) {
+      const msg =
+        validation.errors[0] || 'קובץ הפרויקט אינו בפורמט Keter תקין או שחסרים בו נתוני חובה.';
+      return {
+        valid: false,
+        errorHe: msg,
+        errors: validation.errors,
+        warnings: validation.warnings,
+      };
+    }
+
+    return {
+      valid: true,
+      snapshot: validation.snapshot,
+      errors: [],
+      warnings: validation.warnings,
+    };
+  }
+
+  /**
+   * Deserializes and validates a `.keter.json` string, throwing a clear Hebrew error if invalid
+   */
+  public static deserializeKeterProject(jsonText: string): ProjectSnapshot {
+    const res = this.validateAndParseProjectJson(jsonText);
+    if (!res.valid || !res.snapshot) {
+      throw new Error(res.errorHe || 'קובץ הפרויקט אינו בפורמט Keter תקין.');
+    }
+    return res.snapshot;
+  }
+
+  /**
+   * Exports project as a native .keter.json editable project file Blob
+   */
+  public static exportKeterProjectBlob(snapshot: ProjectSnapshot): Blob {
+    const jsonString = this.serializeKeterProject(snapshot);
+    return new Blob([jsonString], {
+      type: 'application/json;charset=utf-8',
+    });
+  }
+
+  /**
+   * Returns recent projects stored in localStorage
+   */
+  public static getRecentProjects(): RecentProjectItem[] {
+    try {
+      const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        item =>
+          item &&
+          typeof item === 'object' &&
+          typeof item.projectId === 'string' &&
+          typeof item.documentTitle === 'string' &&
+          item.snapshot
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Records or updates a project in the Recent Projects list (keeps up to 12 recent projects)
+   */
+  public static recordRecentProject(
+    snapshot: ProjectSnapshot,
+    customFileName?: string
+  ): RecentProjectItem[] {
+    try {
+      const validation = this.validateProjectPayload(snapshot);
+      const cleanSnap = validation.valid && validation.snapshot ? validation.snapshot : snapshot;
+      const projectId =
+        cleanSnap.projectMetadata?.projectId || cleanSnap.id || `project-${Date.now()}`;
+      const baseFileName =
+        (customFileName || cleanSnap.documentTitle || 'project')
+          .replace(/\.(keter\.json|keter|json)$/i, '')
+          .replace(/[<>:"/\\|?*]+/g, '_')
+          .replace(/\s+/g, '_') + '.keter';
+
+      const entry: RecentProjectItem = {
+        projectId,
+        documentTitle: cleanSnap.documentTitle,
+        fileName: baseFileName,
+        layoutType: cleanSnap.layoutType,
+        totalUnits: cleanSnap.units?.length ?? 0,
+        updatedAt: Date.now(),
+        snapshot: cleanSnap,
+      };
+
+      const existing = this.getRecentProjects();
+      const updated = [
+        entry,
+        ...existing.filter(
+          p => p.projectId !== projectId && p.documentTitle !== cleanSnap.documentTitle
+        ),
+      ].slice(0, 12);
+      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(updated));
+      return updated;
+    } catch {
+      return this.getRecentProjects();
+    }
+  }
+
+  /**
+   * Removes a project from the recent projects list
+   */
+  public static removeRecentProject(projectId: string): RecentProjectItem[] {
+    try {
+      const existing = this.getRecentProjects();
+      const updated = existing.filter(p => p.projectId !== projectId);
+      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(updated));
+      return updated;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Safely updates a single ContentUnit's text (and optionally Dibbur HaMatchil) for in-place canvas editing
+   * while preserving unit ID, semantic role, rich-text formatting runs (`isBold`, `isItalic`, `isUnderline`,
+   * `fontSizePt`, `fontFamily`, `textColor`), footnote anchors (`footnoteMarker`, `footnoteUnitId`,
+   * `footnoteAnchorWordIndex`), and RavTextLink relationships (including `isUserLocked`).
+   */
+  public static updateContentUnitText(
+    units: ContentUnit[],
+    links: RavTextLink[],
+    unitId: string,
+    newRawText: string,
+    options?: {
+      pageWordStartIndex?: number;
+      pageWordEndIndexExclusive?: number;
+    }
+  ): { units: ContentUnit[]; links: RavTextLink[]; updatedUnit?: ContentUnit } {
+    const targetUnit = units.find(u => u.id === unitId);
+    if (!targetUnit) {
+      return { units, links };
+    }
+
+    const normalizedInput = newRawText.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
+    if (!normalizedInput) {
+      return { units, links };
+    }
+
+    // If this edit was performed on a multi-page unit slice (`[pageWordStartIndex .. pageWordEndIndexExclusive)`),
+    // splice the edited words into the unit's full word sequence so off-page words of the unit are 100% preserved!
+    const origWords = targetUnit.rawText.trim().split(/\s+/).filter(Boolean);
+    let effectiveRawText = normalizedInput;
+    if (
+      options &&
+      typeof options.pageWordStartIndex === 'number' &&
+      typeof options.pageWordEndIndexExclusive === 'number' &&
+      (options.pageWordStartIndex > 0 || options.pageWordEndIndexExclusive < origWords.length)
+    ) {
+      const prefixWords = origWords.slice(0, Math.max(0, options.pageWordStartIndex));
+      const suffixWords = origWords.slice(
+        Math.min(origWords.length, options.pageWordEndIndexExclusive)
+      );
+      const editedSliceWords = normalizedInput.split(/\s+/).filter(Boolean);
+      effectiveRawText = [...prefixWords, ...editedSliceWords, ...suffixWords].join(' ').trim();
+    }
+
+    if (!effectiveRawText) {
+      return { units, links };
+    }
+
+    let updatedUnit: ContentUnit | undefined;
+    let newDibbur: string | undefined;
+
+    const nextUnits = units.map(u => {
+      if (u.id !== unitId) return u;
+
+      const isComment =
+        u.role === 'primary_comment' ||
+        u.role === 'secondary_comment' ||
+        u.role === 'tertiary_comment' ||
+        u.role === 'dibbur_hamatchil';
+
+      let dibbur = u.dibburHamatchil;
+      if (isComment) {
+        const delimMatch = effectiveRawText.match(/^([^.:—–\n]{2,55}?)(?:\s*[:—–]|\s+-\s+|\.\s+)/);
+        if (delimMatch && delimMatch[1]) {
+          dibbur = delimMatch[1]
+            .replace(/^[\s[\]()]+/g, '')
+            .replace(/^(?:רש["״]י|תוספות|תוס['׳]|ד["״]ה|בד["״]ה)\s+/g, '')
+            .trim();
+        }
+      }
+      newDibbur = dibbur;
+
+      // Build word-level formatting & footnote map from existing textRuns so inline rich-text formatting
+      // and exact footnote reference word anchors are preserved across in-place edits!
+      interface WordStyleSnapshot {
+        token: string;
+        isBold?: boolean;
+        isDibbur?: boolean;
+        isItalic?: boolean;
+        isUnderline?: boolean;
+        fontFamily?: string;
+        fontSizePt?: number;
+        footnoteMarker?: number | string;
+        footnoteUnitId?: string;
+      }
+      const oldWordSnapshots: WordStyleSnapshot[] = [];
+      const existingRuns =
+        u.textRuns && u.textRuns.length > 0
+          ? u.textRuns
+          : DocxImporter.buildRunsFromRawText(u.rawText, u.role, u.dibburHamatchil);
+
+      for (const r of existingRuns) {
+        const rTokens = r.text.trim().split(/\s+/).filter(Boolean);
+        for (let ti = 0; ti < rTokens.length; ti++) {
+          const isLastTokenInRun = ti === rTokens.length - 1;
+          oldWordSnapshots.push({
+            token: rTokens[ti],
+            isBold: r.isBold,
+            isDibbur: r.isDibbur,
+            isItalic: r.isItalic,
+            isUnderline: r.isUnderline,
+            fontFamily: r.fontFamily,
+            fontSizePt: r.fontSizePt,
+            footnoteMarker: isLastTokenInRun ? r.footnoteMarker : undefined,
+            footnoteUnitId: isLastTokenInRun ? r.footnoteUnitId : undefined,
+          });
+        }
+      }
+
+      // First build base runs (which handle Dibbur HaMatchil detection for commentaries)
+      const baseRuns = DocxImporter.buildRunsFromRawText(effectiveRawText, u.role, dibbur);
+      const newTokens = effectiveRawText.split(/\s+/).filter(Boolean);
+
+      // Determine which new words are Dibbur words according to baseRuns
+      const newWordDibburFlags: boolean[] = [];
+      for (const br of baseRuns) {
+        const bTokens = br.text.trim().split(/\s+/).filter(Boolean);
+        for (let k = 0; k < bTokens.length; k++) {
+          newWordDibburFlags.push(Boolean(br.isDibbur));
+        }
+      }
+
+      // Align oldWordSnapshots to newTokens using prefix/suffix + token matching so inline formatting
+      // and footnote markers stay attached to their exact words when characters/words are inserted or deleted
+      let prefixLen = 0;
+      while (
+        prefixLen < oldWordSnapshots.length &&
+        prefixLen < newTokens.length &&
+        oldWordSnapshots[prefixLen].token === newTokens[prefixLen]
+      ) {
+        prefixLen++;
+      }
+
+      let oldSuffixIdx = oldWordSnapshots.length - 1;
+      let newSuffixIdx = newTokens.length - 1;
+      while (
+        oldSuffixIdx >= prefixLen &&
+        newSuffixIdx >= prefixLen &&
+        oldWordSnapshots[oldSuffixIdx].token === newTokens[newSuffixIdx]
+      ) {
+        oldSuffixIdx--;
+        newSuffixIdx--;
+      }
+
+      const mappedNewWords: WordStyleSnapshot[] = newTokens.map((tok, idx) => {
+        const isDibburWord = newWordDibburFlags[idx] ?? false;
+        let matchedOld: WordStyleSnapshot | undefined;
+        if (idx < prefixLen) {
+          matchedOld = oldWordSnapshots[idx];
+        } else if (idx > newSuffixIdx) {
+          const offsetFromEnd = newTokens.length - 1 - idx;
+          matchedOld = oldWordSnapshots[oldWordSnapshots.length - 1 - offsetFromEnd];
+        } else {
+          // Inside the edited middle span: inherit style from the nearest corresponding old word in the middle span
+          const relIdx = idx - prefixLen;
+          const candidateOldIdx = Math.min(
+            oldSuffixIdx,
+            Math.max(prefixLen, prefixLen + relIdx)
+          );
+          if (candidateOldIdx >= 0 && candidateOldIdx < oldWordSnapshots.length) {
+            matchedOld = oldWordSnapshots[candidateOldIdx];
+          }
+        }
+
+        return {
+          token: tok,
+          isDibbur: isDibburWord,
+          isBold: isDibburWord ? true : Boolean(matchedOld?.isBold && !matchedOld?.isDibbur),
+          isItalic: matchedOld?.isItalic,
+          isUnderline: matchedOld?.isUnderline,
+          fontFamily: matchedOld?.fontFamily,
+          fontSizePt: matchedOld?.fontSizePt,
+        };
+      });
+
+      // Re-attach every footnote marker from oldWordSnapshots to its exact aligned word in mappedNewWords
+      for (let oldIdx = 0; oldIdx < oldWordSnapshots.length; oldIdx++) {
+        const snap = oldWordSnapshots[oldIdx];
+        if (snap.footnoteMarker === undefined) continue;
+
+        let targetNewIdx = -1;
+        if (oldIdx < prefixLen) {
+          targetNewIdx = oldIdx;
+        } else if (oldIdx > oldSuffixIdx) {
+          const offsetFromEnd = oldWordSnapshots.length - 1 - oldIdx;
+          targetNewIdx = Math.max(0, mappedNewWords.length - 1 - offsetFromEnd);
+        } else {
+          targetNewIdx = Math.min(
+            mappedNewWords.length - 1,
+            Math.max(0, prefixLen + (oldIdx - prefixLen))
+          );
+        }
+
+        if (targetNewIdx >= 0 && targetNewIdx < mappedNewWords.length) {
+          mappedNewWords[targetNewIdx].footnoteMarker = snap.footnoteMarker;
+          mappedNewWords[targetNewIdx].footnoteUnitId = snap.footnoteUnitId;
+        }
+      }
+
+      // Coalesce consecutive words with identical formatting (and no footnote marker boundary) into clean TextRuns
+      const rebuiltRuns: NonNullable<ContentUnit['textRuns']> = [];
+      for (let wi = 0; wi < mappedNewWords.length; wi++) {
+        const w = mappedNewWords[wi];
+        const prevRun = rebuiltRuns.length > 0 ? rebuiltRuns[rebuiltRuns.length - 1] : null;
+        const canMergeWithPrev =
+          prevRun &&
+          prevRun.footnoteMarker === undefined &&
+          Boolean(prevRun.isBold) === Boolean(w.isBold) &&
+          Boolean(prevRun.isDibbur) === Boolean(w.isDibbur) &&
+          Boolean(prevRun.isItalic) === Boolean(w.isItalic) &&
+          Boolean(prevRun.isUnderline) === Boolean(w.isUnderline) &&
+          prevRun.fontFamily === w.fontFamily &&
+          prevRun.fontSizePt === w.fontSizePt;
+
+        if (canMergeWithPrev && prevRun) {
+          prevRun.text += ' ' + w.token;
+          if (w.footnoteMarker !== undefined) {
+            prevRun.footnoteMarker = w.footnoteMarker;
+            prevRun.footnoteUnitId = w.footnoteUnitId;
+            prevRun.footnoteAnchorWordIndex = wi;
+          }
+        } else {
+          rebuiltRuns.push({
+            text: w.token,
+            isBold: w.isBold,
+            isDibbur: w.isDibbur,
+            isItalic: w.isItalic,
+            isUnderline: w.isUnderline,
+            fontFamily: w.fontFamily,
+            fontSizePt: w.fontSizePt,
+            footnoteMarker: w.footnoteMarker,
+            footnoteUnitId: w.footnoteUnitId,
+            footnoteAnchorWordIndex: w.footnoteMarker !== undefined ? wi : undefined,
+          });
+        }
+      }
+
+      updatedUnit = {
+        ...u,
+        rawText: effectiveRawText,
+        dibburHamatchil: dibbur,
+        chapterTitle: u.role === 'chapter' ? effectiveRawText : u.chapterTitle,
+        textRuns: rebuiltRuns,
+      };
+      return updatedUnit;
+    });
+
+    const nextLinks = links.map(lnk => {
+      if (lnk.commentaryUnitId === unitId && updatedUnit) {
+        return {
+          ...lnk,
+          // Preserve user-locked Dibbur HaMatchil if locked, or update to newDibbur
+          dibburHamatchil: lnk.isUserLocked
+            ? lnk.dibburHamatchil || newDibbur || ''
+            : newDibbur || lnk.dibburHamatchil,
+          commentarySnippet: effectiveRawText.substring(0, 50),
+        };
+      }
+      if (lnk.sourceUnitId === unitId && updatedUnit) {
+        return {
+          ...lnk,
+          sourceSnippet: effectiveRawText.substring(0, 50),
+        };
+      }
+      return lnk;
+    });
+
+    return { units: nextUnits, links: nextLinks, updatedUnit };
+  }
+
+  /**
+   * Saves a `.keter` project file using native Windows desktop File System Access API
+   * (`window.showSaveFilePicker`) when available, or falls back to direct file download.
+   * Produces a structured ZIP-based archive for `.keter` files, and raw JSON for `.keter.json`.
+   */
+  public static async saveProjectFileToDisk(
+    snapshot: ProjectSnapshot,
+    suggestedFileName?: string
+  ): Promise<{ saved: boolean; fileName: string }> {
+    const rawSuggested = (suggestedFileName || snapshot.documentTitle || 'project')
+      .replace(/[<>:"/\\|?*]+/g, '_')
+      .replace(/\s+/g, '_');
+    const cleanName = /\.(keter\.json|keter|json)$/i.test(rawSuggested)
+      ? rawSuggested
+      : `${rawSuggested}.keter`;
+
+    // If file extension is explicitly .keter.json or .json, export pure JSON; otherwise export structured ZIP archive
+    const isPureJson = cleanName.toLowerCase().endsWith('.keter.json') || cleanName.toLowerCase().endsWith('.json');
+    let fileBlob: Blob;
+    if (isPureJson) {
+      const jsonString = this.serializeKeterProject(snapshot);
+      fileBlob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    } else {
+      fileBlob = await this.serializeKeterArchiveZip(snapshot);
+    }
+
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win && typeof win.showSaveFilePicker === 'function') {
+      try {
+        const handle = await win.showSaveFilePicker({
+          suggestedName: cleanName,
+          types: [
+            {
+              description: 'Keter Typesetter Project (.keter)',
+              accept: {
+                'application/x-keter-project': ['.keter'],
+                'application/json': ['.keter.json', '.json'],
+              },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(fileBlob);
+        await writable.close();
+        const finalName = handle.name || cleanName;
+        this.recordRecentProject(snapshot, finalName);
+        return { saved: true, fileName: finalName };
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') {
+          return { saved: false, fileName: cleanName };
+        }
+        // In an iframe where showSaveFilePicker is blocked by cross-origin security, fall through to Blob download
+      }
+    }
+
+    const url = URL.createObjectURL(fileBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = cleanName;
+    a.click();
+    URL.revokeObjectURL(url);
+    this.recordRecentProject(snapshot, cleanName);
+    return { saved: true, fileName: cleanName };
+  }
+
+  public static async saveProjectFileDesktop(
+    snapshot: ProjectSnapshot,
+    suggestedFileName?: string
+  ): Promise<{ saved: boolean; fileName: string }> {
+    return this.saveProjectFileToDisk(snapshot, suggestedFileName);
+  }
+
+  public static async openProjectFilePickerDesktop(): Promise<File | null> {
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win && typeof win.showOpenFilePicker === 'function') {
+      try {
+        const [handle] = await win.showOpenFilePicker({
+          multiple: false,
+          types: [
+            {
+              description: 'Keter Typesetter Project (.keter, .keter.json, .json)',
+              accept: {
+                'application/json': ['.keter', '.keter.json', '.json'],
+              },
+            },
+          ],
+        });
+        if (handle) {
+          return (await handle.getFile()) as File;
+        }
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') {
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  public static createNewProjectSnapshot(options: {
+    documentTitle?: string;
+    layoutType?: BookLayoutType;
+    units?: ContentUnit[];
+    links?: RavTextLink[];
+    selectedFont?: string;
+    selectedRashiFont?: string;
+    selectedTosafotFont?: string;
+    geometry?: PageGeometry;
+    customLayout?: CustomLayoutDesign;
+  }): ProjectSnapshot {
+    const title = (options.documentTitle || '').trim() || 'ספר קודש חדש';
+    const layoutType: BookLayoutType = options.layoutType ?? 'rav_text';
+    const blank = this.createBlankProjectSnapshot(title, layoutType);
+
+    const sourceFont = options.selectedFont ?? blank.selectedFont;
+    const rashiFont = options.selectedRashiFont ?? blank.selectedRashiFont;
+    const tosafotFont = options.selectedTosafotFont ?? blank.selectedTosafotFont;
+    const geom = options.geometry ?? blank.geometry;
+
+    const designSettings = DesignSettingsEngine.createDefaultSettings({
+      projectId: blank.projectMetadata?.projectId || blank.id,
+      layoutType,
+      geometry: geom,
+      sourceFontFamily: sourceFont,
+      rashiFontFamily: rashiFont,
+      tosafotFontFamily: tosafotFont,
+      customLayout: options.customLayout,
+    });
+
+    const unitsToUse =
+      Array.isArray(options.units) && options.units.length > 0
+        ? JSON.parse(JSON.stringify(options.units))
+        : blank.units;
+
+    const linksToUse =
+      Array.isArray(options.links) && (options.units?.length ?? 0) > 0
+        ? JSON.parse(JSON.stringify(options.links))
+        : (options.units?.length ?? 0) > 0
+        ? []
+        : blank.links;
+
+    return {
+      ...blank,
+      documentTitle: title,
+      layoutType,
+      geometry: designSettings.layout.geometry,
+      units: unitsToUse,
+      links: linksToUse,
+      selectedFont: sourceFont,
+      selectedRashiFont: rashiFont,
+      selectedTosafotFont: tosafotFont,
+      designSettings,
+    };
+  }
+
+  /**
+   * Imports and validates a .keter.json project file
+   */
+  public static async importKeterProjectFile(file: File): Promise<ProjectSnapshot> {
+    const text = await file.text();
+    return this.deserializeKeterProject(text);
+  }
+
+  /**
+   * Creates a clean blank/starter document state for "New Project"
+   */
+  public static createBlankProjectSnapshot(
+    title: string = 'פרויקט חדש — ספר קודש',
+    layoutType: BookLayoutType = 'rav_text'
+  ): ProjectSnapshot {
+    const defaultDesign = DesignSettingsEngine.createDefaultSettings({
+      projectId: `project-${Date.now()}`,
+      layoutType,
+      sourceFontFamily: 'Frank Ruhl Libre',
+      rashiFontFamily: 'Noto Rashi Hebrew',
+      tosafotFontFamily: 'Frank Ruhl Libre',
+    });
+
+    const units: ContentUnit[] =
+      layoutType === 'rav_text' || layoutType === 'mikraot_gedolot'
+        ? [
+            {
+              id: 'unit-new-source-1',
+              role: 'main_source',
+              rawText:
+                'מתניתין: כָּאן יָבוֹא טֶקְסְט הַמָּקוֹר הָרָאשִׁי. נִיתָּן לַעֲרוֹךְ אֶת הַתּוֹכֶן אוֹ לְיַבֵּא קוֹבְצֵי ווֹרְד (DOCX).',
+              styleName: 'Main Source',
+              order: 1,
+              hierarchyLevel: 2,
+            },
+            {
+              id: 'unit-new-rashi-1',
+              role: 'primary_comment',
+              rawText: 'כָּאן יָבוֹא: פֵּרוּשׁ רַשִׁ״י אוֹ הַמְּפָרֵשׁ הָרָאשִׁי בָּעֲמוּדָה הַיְּמָנִית.',
+              styleName: 'Rashi Script',
+              order: 2,
+              hierarchyLevel: 3,
+              dibburHamatchil: 'כָּאן יָבוֹא',
+              linkedSourceId: 'unit-new-source-1',
+            },
+            {
+              id: 'unit-new-tosafot-1',
+              role: 'secondary_comment',
+              rawText: 'כָּאן יָבוֹא טֶקְסְט: פֵּרוּשׁ תּוֹסָפוֹת אוֹ הַמְּפָרֵשׁ הַמִּשְׁנִי בָּעֲמוּדָה הַשְּׂמָאלִית.',
+              styleName: 'Tosafot',
+              order: 3,
+              hierarchyLevel: 3,
+              dibburHamatchil: 'כָּאן יָבוֹא טֶקְסְט',
+              linkedSourceId: 'unit-new-source-1',
+            },
+          ]
+        : [
+            {
+              id: 'unit-new-chapter-1',
+              role: 'chapter',
+              rawText: 'פֶּרֶק רִאשׁוֹן',
+              styleName: 'Heading 1',
+              order: 1,
+              hierarchyLevel: 1,
+            },
+            {
+              id: 'unit-new-source-1',
+              role: 'main_source',
+              rawText:
+                'כָּאן יָבוֹא גּוּף הַסֵּפֶר. לְחַץ עַל "עֲרִיכַת תּוֹכֶן" אוֹ "יְבוּא DOCX" כְּדֵי לְהַזִּין אֶת טֶקְסְט הַסֵּפֶר.',
+              styleName: 'Normal',
+              order: 2,
+              hierarchyLevel: 2,
+            },
+          ];
+
+    const links: RavTextLink[] =
+      layoutType === 'rav_text' || layoutType === 'mikraot_gedolot'
+        ? [
+            {
+              linkId: 'link-new-1',
+              sourceUnitId: 'unit-new-source-1',
+              commentaryUnitId: 'unit-new-rashi-1',
+              dibburHamatchil: 'כָּאן יָבוֹא',
+              isUserLocked: false,
+              confidenceScore: 1.0,
+              sourceSnippet: 'כָּאן יָבוֹא טֶקְסְט הַמָּקוֹר',
+              commentarySnippet: 'כָּאן יָבוֹא: פֵּרוּשׁ רַשִׁ״י',
+              commentaryType: 'Rashi',
+            },
+            {
+              linkId: 'link-new-2',
+              sourceUnitId: 'unit-new-source-1',
+              commentaryUnitId: 'unit-new-tosafot-1',
+              dibburHamatchil: 'כָּאן יָבוֹא טֶקְסְט',
+              isUserLocked: false,
+              confidenceScore: 1.0,
+              sourceSnippet: 'כָּאן יָבוֹא טֶקְסְט הַמָּקוֹר',
+              commentarySnippet: 'כָּאן יָבוֹא טֶקְסְט: פֵּרוּשׁ תּוֹסָפוֹת',
+              commentaryType: 'Tosafot',
+            },
+          ]
+        : [];
+
+    const now = Date.now();
+    return {
+      id: defaultDesign.projectId || `project-${now}`,
+      timestamp: now,
+      label: 'פרויקט חדש',
+      documentTitle: title,
+      layoutType,
+      geometry: defaultDesign.pageLayout.geometry,
+      units,
+      links,
+      kneeSettings: defaultDesign.ravText.kneeSettings,
+      sourceFontSize: defaultDesign.roleStyles.main_source.character.fontSizePt,
+      commentaryFontSize: defaultDesign.roleStyles.primary_comment.character.fontSizePt,
+      selectedFont: 'Frank Ruhl Libre',
+      selectedRashiFont: 'Noto Rashi Hebrew',
+      selectedTosafotFont: 'Frank Ruhl Libre',
+      enableOrnaments: true,
+      currentPageIndex: 0,
+      selectedOrnaments: [],
+      ornamentRules: [],
+      projectRules: [],
+      localOverrides: [],
+      designSettings: defaultDesign,
+      projectMetadata: {
+        projectId: defaultDesign.projectId || `project-${now}`,
+        createdAt: now,
+        updatedAt: now,
+        appVersion: '2.5.0-stage15',
+      },
+    };
+  }
+
+  /**
+   * Commercial License Management (One-time paid license, 1 active computer at a time)
+   */
+  public static getLicenseStatus(): LicenseStatus {
+    try {
+      const raw = localStorage.getItem(LICENSE_KEY);
+      if (raw) {
+        return JSON.parse(raw) as LicenseStatus;
+      }
+    } catch {
+      // Fallback
+    }
+
+    const defaultStatus: LicenseStatus = {
+      isActivated: true,
+      licenseKey: 'KTR-PRO-2026-VILNA-8842',
+      machineId: 'WIN-DESKTOP-IL-01',
+      machineName: 'תחנת עבודה ראשית — Windows Desktop',
+      activatedAt: new Date().toLocaleDateString('he-IL'),
+      ownerEmail: 'typesetter@keter-studio.co.il',
+      availableUpdate: {
+        version: '2.5.0 (מנוע מחזור חיי מסמך ושמירת פרויקט מלאה)',
+        releaseNotes:
+          'אימות ושחזור אוטומטי של פרויקטים, הגנה מפני אובדן שינויים לא שמורים, ושמירה מלאה בפורמט .keter.json.',
+      },
+    };
+    return defaultStatus;
+  }
+
+  public static saveLicenseStatus(status: LicenseStatus): void {
+    try {
+      localStorage.setItem(LICENSE_KEY, JSON.stringify(status));
+    } catch {
+      // Ignore
+    }
+  }
+}

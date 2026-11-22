@@ -1,0 +1,231 @@
+name: Chromium Hebrew PDF prototype
+on:
+  push:
+    branches: [experiment/chromium-pdf-prototype]
+  workflow_dispatch:
+jobs:
+  prototype:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The repository currently has an existing Vite/esbuild peer-dependency conflict.
+      # This standalone prototype only needs Playwright, so tolerate the repo's peer mismatch
+      # rather than changing application dependencies for this experiment.
+      - run: npm install --no-save --legacy-peer-deps playwright tsx
+      - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils qpdf mupdf-tools
+      - run: mkdir -p artifacts
+      - name: Generate a real Keter page render plan
+        run: npx tsx scripts/export-keter-render-plan.ts
+      - name: Render the Keter page with Chromium
+        run: node scripts/chromium-pdf-prototype.mjs
+      - name: Extract PDF text for inspection
+        if: always()
+        run: |
+          if [ -f artifacts/chromium-keter-page.pdf ]; then
+            pdftotext artifacts/chromium-keter-page.pdf artifacts/extracted.txt
+            pdftotext -raw artifacts/chromium-keter-page.pdf artifacts/extracted-raw.txt
+            if [ -f artifacts/chromium-hebrew-text-diagnostic.pdf ]; then
+              pdftotext -layout artifacts/chromium-hebrew-text-diagnostic.pdf artifacts/text-diagnostic-layout.txt
+              pdftotext -raw artifacts/chromium-hebrew-text-diagnostic.pdf artifacts/text-diagnostic-raw.txt
+              echo '--- controlled fixture tagged: layout extraction ---'
+              cat artifacts/text-diagnostic-layout.txt
+              echo '--- controlled fixture tagged: raw extraction ---'
+              cat artifacts/text-diagnostic-raw.txt
+            fi
+            if [ -f artifacts/chromium-hebrew-text-diagnostic-untagged.pdf ]; then
+              pdftotext -layout artifacts/chromium-hebrew-text-diagnostic-untagged.pdf artifacts/text-diagnostic-untagged-layout.txt
+              pdftotext -raw artifacts/chromium-hebrew-text-diagnostic-untagged.pdf artifacts/text-diagnostic-untagged-raw.txt
+              echo '--- controlled fixture untagged: layout extraction ---'
+              cat artifacts/text-diagnostic-untagged-layout.txt
+              echo '--- controlled fixture untagged: raw extraction ---'
+              cat artifacts/text-diagnostic-untagged-raw.txt
+              python3 - <<'PY'
+          from pathlib import Path
+          for name in (
+              "artifacts/text-diagnostic-layout.txt",
+              "artifacts/text-diagnostic-raw.txt",
+              "artifacts/text-diagnostic-untagged-layout.txt",
+              "artifacts/text-diagnostic-untagged-raw.txt",
+          ):
+              content = Path(name).read_text(encoding="utf-8")
+              hebrew = sum(0x0590 <= ord(ch) <= 0x05ff for ch in content)
+              print(f"{name}: {hebrew} Hebrew-range characters")
+              if hebrew < 10:
+                  raise SystemExit(
+                      f"Controlled PDF diagnostic is invalid: {name} contains labels but not Hebrew text"
+                  )
+          PY
+            fi
+            echo '--- default extraction ---'
+            cat artifacts/extracted.txt
+            echo '--- raw extraction ---'
+            cat artifacts/extracted-raw.txt
+            # PDF text extraction may reorder combining marks and insert bidi controls.
+            # Normalize to base Hebrew letters before checking that content is present.
+            python3 - <<'PY'
+          import unicodedata
+          from pathlib import Path
+          source = Path("artifacts/extracted.txt").read_text(encoding="utf-8")
+          cleaned = "".join(
+              ch for ch in unicodedata.normalize("NFD", source)
+              if not unicodedata.combining(ch)
+              and unicodedata.category(ch) != "Cf"
+          )
+          Path("artifacts/extracted-normalized.txt").write_text(cleaned, encoding="utf-8")
+          print("\n--- normalized extraction ---")
+          print(cleaned)
+          PY
+          else
+            echo "PDF was not created; extraction skipped."
+          fi
+      - name: Inspect PDF internals (diagnostic only)
+        if: always()
+        run: |
+          if [ -f artifacts/chromium-keter-page.pdf ]; then
+            pdffonts artifacts/chromium-keter-page.pdf > artifacts/pdf-fonts.txt 2>&1 || true
+            pdftotext -bbox-layout artifacts/chromium-keter-page.pdf artifacts/pdf-bbox.html 2> artifacts/pdf-bbox-errors.txt || true
+            qpdf --qdf --object-streams=disable artifacts/chromium-keter-page.pdf artifacts/pdf-objects-qdf.pdf 2> artifacts/qpdf-errors.txt || true
+            mutool show artifacts/chromium-keter-page.pdf pages > artifacts/mupdf-pages.txt 2>&1 || true
+            echo '--- embedded font inventory ---'
+            cat artifacts/pdf-fonts.txt
+            echo '--- ToUnicode / font / text operators in decompressed PDF ---'
+            if [ -f artifacts/pdf-objects-qdf.pdf ]; then
+              grep -aEn 'ToUnicode|begincmap|beginbfchar|beginbfrange|/Font|BT|ET|TJ| Tj| Tf' artifacts/pdf-objects-qdf.pdf > artifacts/pdf-text-map-summary.txt || true
+              head -n 250 artifacts/pdf-text-map-summary.txt
+            fi
+            echo '--- bounding-box extraction sample ---'
+            grep -oE '<word[^>]*>[^<]*</word>' artifacts/pdf-bbox.html | head -n 80 || true
+          else
+            echo 'PDF missing; internal inspection skipped.'
+          fi
+      - name: Verify nikud survives PDF text extraction
+        if: always()
+        run: |
+          if [ -f artifacts/extracted.txt ] && [ -f artifacts/keter-page-render-plan.json ]; then
+            python3 - <<'PY'
+          import json
+          import unicodedata
+          from pathlib import Path
+
+          extracted = Path("artifacts/extracted.txt").read_text(encoding="utf-8")
+          plan = json.loads(Path("artifacts/keter-page-render-plan.json").read_text(encoding="utf-8"))
+          words = [
+              word.get("text", "")
+              for line in plan["plan"]["lines"]
+              for word in line.get("words", [])
+          ]
+          is_hebrew_mark = lambda ch: 0x0591 <= ord(ch) <= 0x05C7 and unicodedata.category(ch) in ("Mn", "Mc", "Me")
+          source_marks = sum(1 for word in words for ch in word if is_hebrew_mark(ch))
+          extracted_marks = sum(1 for ch in extracted if is_hebrew_mark(ch))
+          print(f"Combining Hebrew marks in render plan: {source_marks}")
+          print(f"Combining Hebrew marks extracted from PDF: {extracted_marks}")
+          if source_marks and not extracted_marks:
+              raise SystemExit(
+                  "Regression: source render plan contains Hebrew nikud/taamim, "
+                  "but PDF text extraction contains none."
+              )
+          if source_marks == 0:
+              print("WARNING: fixture page contains no Unicode Hebrew marks; this audit is inconclusive.")
+          PY
+          else
+            echo "Render plan or extracted PDF text missing; nikud audit skipped."
+            exit 1
+          fi
+      - name: Audit complete marked-word continuity
+        if: always()
+        run: |
+          if [ -f artifacts/extracted.txt ] && [ -f artifacts/keter-page-render-plan.json ]; then
+            python3 - <<'PY'
+          import json
+          import unicodedata
+          from pathlib import Path
+
+          raw = Path("artifacts/extracted.txt").read_text(encoding="utf-8")
+          raw_mode = Path("artifacts/extracted-raw.txt").read_text(encoding="utf-8") if Path("artifacts/extracted-raw.txt").exists() else ""
+          plan = json.loads(Path("artifacts/keter-page-render-plan.json").read_text(encoding="utf-8"))
+          words = [
+              word.get("text", "")
+              for line in plan["plan"]["lines"]
+              for word in line.get("words", [])
+          ]
+
+          # Strip only invisible Unicode formatting controls. Deliberately preserve
+          # spaces and Hebrew combining marks: removing either would conceal the
+          # exact failure mode this diagnostic is meant to detect.
+          def normalize(value):
+              value = "".join(ch for ch in value if unicodedata.category(ch) != "Cf")
+              return unicodedata.normalize("NFC", value)
+
+          extracted = normalize(raw)
+          extracted_raw = normalize(raw_mode)
+          marked_words = [
+              w for w in words
+              if any(0x0591 <= ord(ch) <= 0x05C7 and unicodedata.category(ch) in ("Mn", "Mc", "Me") for ch in w)
+              and len(w.strip()) >= 2
+          ]
+          matches = [w for w in marked_words if normalize(w) in extracted]
+          misses = [w for w in marked_words if normalize(w) not in extracted]
+          raw_matches = [w for w in marked_words if normalize(w) in extracted_raw]
+          print(f"Marked source words tested: {len(marked_words)}")
+          print(f"Default extraction contiguous matches: {len(matches)}")
+          print(f"Default extraction contiguous misses: {len(misses)}")
+          print(f"Raw extraction contiguous matches: {len(raw_matches)}")
+          print(f"Raw extraction contiguous misses: {len(marked_words) - len(raw_matches)}")
+          print("First 30 misses (repr preserves spaces/marks):")
+          for word in misses[:30]:
+              print("  SOURCE:", repr(word), "NORMALIZED:", repr(normalize(word)))
+          print("Extraction sample:", repr(extracted[:1200]))
+          # Diagnostic only for the first pass. Once extraction behavior is known,
+          # convert this report into a regression threshold based on measured results.
+          PY
+          else
+            echo "Render plan or extracted PDF text missing; marked-word continuity audit skipped."
+            exit 1
+          fi
+      - name: Verify Hebrew text extraction
+        if: always()
+        run: |
+          if [ ! -s artifacts/chromium-keter-page.pdf ] || [ ! -s artifacts/extracted.txt ]; then
+            echo "PDF or extracted text missing; Hebrew text verification cannot run."
+            exit 1
+          fi
+          if [ ! -s artifacts/extracted-normalized.txt ]; then
+            echo "Normalized extraction was not produced; inspect the earlier extraction/diagnostic failure."
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path("artifacts/extracted-normalized.txt").read_text(encoding="utf-8")
+          hebrew_letters = sum("\u0590" <= ch <= "\u05ff" for ch in text)
+          print(f"Extracted Hebrew-range characters: {hebrew_letters}")
+          if hebrew_letters < 10:
+              raise SystemExit("PDF text extraction did not yield enough Hebrew characters")
+          PY
+      - name: Upload PDF and extraction even if verification fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-hebrew-pdf-prototype
+          if-no-files-found: warn
+          path: |
+            artifacts/chromium-keter-page.pdf
+            artifacts/chromium-hebrew-text-diagnostic.pdf
+            artifacts/chromium-hebrew-text-diagnostic-untagged.pdf
+            artifacts/text-diagnostic-layout.txt
+            artifacts/text-diagnostic-raw.txt
+            artifacts/text-diagnostic-untagged-layout.txt
+            artifacts/text-diagnostic-untagged-raw.txt
+            artifacts/extracted.txt
+            artifacts/extracted-raw.txt
+            artifacts/extracted-normalized.txt
+            artifacts/pdf-fonts.txt
+            artifacts/pdf-bbox.html
+            artifacts/pdf-bbox-errors.txt
+            artifacts/qpdf-errors.txt
+            artifacts/pdf-objects-qdf.pdf
+            artifacts/mupdf-pages.txt
+            artifacts/pdf-text-map-summary.txt

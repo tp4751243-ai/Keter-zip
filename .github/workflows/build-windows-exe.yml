@@ -1,0 +1,59 @@
+name: Build Windows EXE
+
+# Builds the Keter Typesetter desktop app on a Windows runner and publishes
+# the NSIS installer (.exe) on a GitHub Release (tag v<version>). Releases
+# have no artifact-storage quota, so this never fails the way artifact
+# uploads did. No signing yet, so Windows SmartScreen may show a warning
+# on first install — that is expected for an unsigned installer.
+on:
+  workflow_dispatch:
+  push:
+    branches: [react]
+    paths:
+      - 'electron/**'
+      - 'package.json'
+      - 'vite.config.ts'
+      - 'src/**'
+      - 'index.html'
+      - '.github/workflows/build-windows-exe.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          if (Test-Path package-lock.json) { npm ci } else { npm install --no-audit --no-fund }
+
+      - name: Build the web app
+        run: npm run build
+
+      - name: Build the Windows installer
+        run: npm run desktop:build
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish installer to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Keter Typesetter v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: release/*.exe

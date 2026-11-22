@@ -1,0 +1,111 @@
+=== Fetching Authentic Kiddushin Sugya Texts (גמרא קידושין.docx, רשי.docx, תוספות.docx) ===
+Extracted Paragraphs: Gemara=43, Rashi=44, Tosafot=23
+
+=== SEMANTIC LINKING AUDIT ===
+Source segments: 43
+Commentary segments: 67 (Rashi: 44, Tosafot: 23)
+Discovered links: 19
+  [UNLINKED] primary_comment (u-1) DH="NONE" | Text="האשה נקנית - לבעלה:..."
+  [UNLINKED] primary_comment (u-2) DH="NONE" | Text="בשלוש דרכים - כדמפרש ואזיל והאי שלוש לשון נקבה הוא..."
+  [UNLINKED] primary_comment (u-3) DH="NONE" | Text="וקונה את עצמה בשתי דרכים גרסי':..."
+  [LINKED]   primary_comment (u-4) DH="וקונה את עצמה" -> u-1 ("הָאִשָּׁה נִקְנֵית בְּשָׁלֹשׁ דְּרָ...")
+  [UNLINKED] primary_comment (u-5) DH="NONE" | Text="בכסף ובשטר - מפרש בברייתא בגמ' (לקמן קידושין דף ה ..."
+  [UNLINKED] primary_comment (u-6) DH="NONE" | Text="טעמא דב"ש מפרש בגמ' (דף יא.):..."
+  [UNLINKED] primary_comment (u-7) DH="NONE" | Text="פרוטה - של נחושת:..."
+  [UNLINKED] primary_comment (u-8) DH="NONE" | Text="איסר האיטלקי - של כסף ודמיו שמנה פרוטות:..."
+  [UNLINKED] primary_comment (u-9) DH="NONE" | Text="היבמה נקנית - ליבם:..."
+  [UNLINKED] primary_comment (u-10) DH="NONE" | Text="בביאה - להיות כאשתו לכל דבר, שאם בא לגרשה אחר כך, ..."
+  [LINKED]   primary_comment (u-11) DH="ומאי שנא התם" -> u-3 ("גְּמָ׳ הָאִשָּׁה נִקְנֵית. מַאי שְׁ...")
+  [LINKED]   primary_comment (u-12) DH="משום דקבעי למיתני" -> u-15 ("מַאי טַעְמָא תָּנֵי ״שָׁלֹשׁ״ – מִש...")
+  [UNLINKED] primary_comment (u-13) DH="NONE" | Text="וכסף מנלן - לאו הכא קא בעי לה אלא לקמן (קידושין דף..."
+  [UNLINKED] primary_comment (u-14) DH="NONE" | Text="וניתני הכא האיש קונה - כי היכי דתני בלישנא דרבנן ה..."
+  [UNLINKED] primary_comment (u-15) DH="NONE" | Text="וניתני - הכא האיש קונה בג' דרכים:..."
+  [UNLINKED] primary_comment (u-16) DH="NONE" | Text="ומקנה - אותה לעצמה בשתי דרכים. ומשני משום דאיכא בה..."
+  [LINKED]   primary_comment (u-17) DH="בודקין את הזב" -> u-12 ("וְאֶלָּא הָא דְּתַנְיָא: ״בְּשִׁבְע...")
+  [UNLINKED] primary_comment (u-18) DH="NONE" | Text="ופרכינן מ"ט תני שלוש - משום דרכים קאמרת:..."
+  [UNLINKED] primary_comment (u-19) DH="NONE" | Text="ליתני דברים וניתני שלושה - כי אורחא דגמרא:..."
+  [UNLINKED] primary_comment (u-20) DH="NONE" | Text="ותני תרתי משום חדא - בתמיה, שינה לשון כסף ושטר משו..."
+  [UNLINKED] primary_comment (u-21) DH="NONE" | Text="הא מני - דתני לשון דרך בקדושי אשה ר"ש היא דאמר אור..."
+  [UNLINKED] primary_comment (u-22) DH="NONE" | Text="אבידה - אחת מצלעותיו:..."
+  [UNLINKED] primary_comment (u-23) DH="NONE" | Text="בג' דרכים - ערלה ורבעי נוהג בו כאילן ולעניין שביעי..."
+  [LINKED]   primary_comment (u-24) DH="ולירק בדרך אחד" -> u-20 ("וְהָא דִּתְנַן: ״אֶתְרוֹג שָׁוֶה לָ...")
+  [UNLINKED] primary_comment (u-25) DH="NONE" | Text="התם הא קמ"ל - דטעם דאזלינן ביה אחר לקיטה משום אורח..."
+  [UNLINKED] primary_comment (u-26) DH="NONE" | Text="מפני שדרכו ליגדל על כל המים - שמשקין אותו במים שאו..."
+  [UNLINKED] primary_comment (u-27) DH="NONE" | Text="כוי - ספק חיה ספק בהמה:..."
+  [LINKED]   primary_comment (u-28) DH="יש בו דרכים" -> u-22 ("וְהָא דִּתְנַן: ״כּוֹי – יֵשׁ בּוֹ ...")
+  [UNLINKED] primary_comment (u-29) DH="NONE" | Text="שוה לחיה - וטעון כיסוי דם:..."
+  [UNLINKED] primary_comment (u-30) DH="NONE" | Text="ולבהמה - חלבו אסור:..."
+  [UNLINKED] primary_comment (u-31) DH="NONE" | Text="ושוה לבהמה וחיה - טעון שחיטה:..."
+  [UNLINKED] primary_comment (u-32) DH="NONE" | Text="שאין שוה לא לחיה ולא לבהמה - אסור הרבעה עם בהמה וח..."
+  [LINKED]   primary_comment (u-33) DH="זו אחת מן" -> u-22 ("וְהָא דִּתְנַן: ״כּוֹי – יֵשׁ בּוֹ ...")
+  [UNLINKED] primary_comment (u-34) DH="NONE" | Text="דאיכא פלוגתא - חילוק בדרכיו בדרך זו הוא דומה לכאן ..."
+  [UNLINKED] primary_comment (u-35) DH="NONE" | Text="דיקא נמי - דהיכא דלא הוי ליה פלוגתא תנא לכל דבר:..."
+  [UNLINKED] primary_comment (u-36) DH="NONE" | Text="מניינא דרישא - ג' דרכים:..."
+  [UNLINKED] primary_comment (u-37) DH="NONE" | Text="מניינא דסיפא - וקונה את עצמה בשתי דרכים:..."
+  [UNLINKED] primary_comment (u-38) DH="NONE" | Text="למעוטי חופה - שאם מסרה לה אביה לחופה לשם קדושין אי..."
+  [UNLINKED] primary_comment (u-39) DH="NONE" | Text="ולרב הונא כו' - לקמן בשמעתין (קידושין דף ה.):..."
+  [UNLINKED] primary_comment (u-40) DH="NONE" | Text="חליפין - קנין סודר:..."
+  [UNLINKED] primary_comment (u-41) DH="NONE" | Text="מה שדה מקניא בחליפין - דכתיב (רות ד׳:ח׳) וישלוף נע..."
+  [LINKED]   primary_comment (u-42) DH="חליפין איתנהו בפחות" -> u-27 ("וְאֵימָא הָכִי נָמֵי! חֲלִיפִין אִי...")
+  [LINKED]   primary_comment (u-43) DH="לא מקניא נפשה" -> u-28 ("לָא מַקְנְיָא נַפְשַׁהּ....")
+  [LINKED]   primary_comment (u-44) DH="יציאה דכוותה קא" -> u-40 ("יְצִיאָה דִּכְווֹתַהּ קָא מְמַעֵט....")
+  [UNLINKED] secondary_comment (u-1) DH="NONE" | Text="האשה נקנית - הכא תני בה"א. וכן בכמה דוכתין, גבי אי..."
+  [UNLINKED] secondary_comment (u-2) DH="NONE" | Text="ב"ש אומרים בדינר - במס' עדויות (פ"ד מ"ז) תני ליה ג..."
+  [UNLINKED] secondary_comment (u-3) DH="NONE" | Text="בפרוטה ובשווה פרוטה - תימה: דלא הוה למיתני אלא בשו..."
+  [LINKED]   secondary_comment (u-4) DH="וכמה היא פרוטה" -> u-1 ("הָאִשָּׁה נִקְנֵית בְּשָׁלֹשׁ דְּרָ...")
+  [UNLINKED] secondary_comment (u-5) DH="NONE" | Text="אחד מח' באיסר - כשהאיסרים כדינם, אבל כשהאיסרים מתז..."
+  [UNLINKED] secondary_comment (u-6) DH="NONE" | Text="איטלקי - מפרש ר"ת: על שם איטליא של יון ואין לתמוה ..."
+  [UNLINKED] secondary_comment (u-7) DH="NONE" | Text="היבמה נקנית כו' - תימה דלא תני מניינא כדלעיל, ולית..."
+  [LINKED]   secondary_comment (u-8) DH="מאי שנא הכא" -> u-3 ("גְּמָ׳ הָאִשָּׁה נִקְנֵית. מַאי שְׁ...")
+  [LINKED]   secondary_comment (u-9) DH="משום דקבעי למיתני" -> u-15 ("מַאי טַעְמָא תָּנֵי ״שָׁלֹשׁ״ – מִש...")
+  [UNLINKED] secondary_comment (u-10) DH="NONE" | Text="וכסף מנלן גמר קיחה קיחה משדה עפרון - ואם תאמר: ומה..."
+  [UNLINKED] secondary_comment (u-11) DH="NONE" | Text="וכתיב התם נתתי כסף השדה קח ממני - אינו חושש אלא שמ..."
+  [UNLINKED] secondary_comment (u-12) DH="NONE" | Text="אי נמי שדות בכסף יקנו - והא דלא מייתי קנין שנכתב ב..."
+  [LINKED]   secondary_comment (u-13) DH="דאסר לה אכולי" -> u-7 ("וְנִיתְנֵי הָתָם ״הָאִישׁ קוֹנֶה״! ...")
+  [UNLINKED] secondary_comment (u-14) DH="NONE" | Text="אי תנא קונה ה"א בעל כרחה - ואע"ג דתני "האיש מקדש" ..."
+  [UNLINKED] secondary_comment (u-15) DH="NONE" | Text="ליתני שלושה - פירוש, משום דכל התורה כולה בלשון זכר..."
+  [LINKED]   secondary_comment (u-16) DH="קשו קראי אהדדי" -> u-12 ("וְאֶלָּא הָא דְּתַנְיָא: ״בְּשִׁבְע...")
+  [UNLINKED] secondary_comment (u-17) DH="NONE" | Text="הכא דבתורה קאי ותורה איקרי לשון נקבה - וא"ת: מלחמה..."
+  [UNLINKED] secondary_comment (u-18) DH="NONE" | Text="[מפני מה אמרה תורה כי יקח וכו' - פירוש: דמשמע בעל ..."
+  [LINKED]   secondary_comment (u-19) DH="אתרוג שוה לאילן" -> u-20 ("וְהָא דִּתְנַן: ״אֶתְרוֹג שָׁוֶה לָ...")
+  [LINKED]   secondary_comment (u-20) DH="מה ירק דרכו" -> u-21 ("הָתָם הָא קָמַשְׁמַע לַן, דְּדַרְכּ...")
+  [LINKED]   secondary_comment (u-21) DH="לא לחיה ולא" -> u-22 ("וְהָא דִּתְנַן: ״כּוֹי – יֵשׁ בּוֹ ...")
+  [UNLINKED] secondary_comment (u-22) DH="NONE" | Text="ואשה בפחות מש"פ לא מקניא נפשה - פי' בקונטרס משום ד..."
+  [LINKED]   secondary_comment (u-23) DH="יציאה דכוותה קא" -> u-40 ("יְצִיאָה דִּכְווֹתַהּ קָא מְמַעֵט....")
+Unlinked commentaries: 48 / 67 (71.6%)
+
+=== PAGINATION & GEOMETRY AUDIT (12 PAGES) ===
+Page dimensions: 482x680pt | Margins: T=48, B=48, L=42, R=46
+Usable Page Area: 394x584pt = 230096 sq pt
+Typography Settings:
+  Main Source: fontSize=14.5pt, leading=19.14pt (ratio=1.32)
+  Rashi:       fontSize=10.5pt, leading=13.86pt (ratio=1.32)
+  Tosafot:     fontSize=10.5pt, leading=13.86pt (ratio=1.32)
+Page  1 (Daf ב׳): Main= 8L/ 49W | Rashi= 2L/  8W | Tosafot=12L/ 51W | Y-Span=167/584pt (28.6%) | LineRectOcc=27.3% | InkOcc=29.2% | PageUtil=88.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 1 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 4 Look-Ahead: אופטימיזציה דו-עמודית בחרה בגבול קבוצה (rav-group-1) לאיזון מיטבי בין עמוד 1 לעמוד 2. ; Look-Ahead רב-עמודי: שובצו בפועל (49 מילות מקור, 8 רש״י, 51 תוספות) בעמוד 1 ללא איבוד מילים.
+Page  2 (Daf ג׳): Main=27L/158W | Rashi=19L/ 72W | Tosafot=34L/171W | Y-Span=561/584pt (96.1%) | LineRectOcc=92.1% | InkOcc=97.8% | PageUtil=96.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 4 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-4) אינה נכנסת בשלמותה בעמוד 2 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (158 מילות מקור, 72 רש״י, 171 תוספות) בעמוד 2 ללא איבוד מילים.
+Page  3 (Daf ד׳): Main=19L/114W | Rashi=14L/ 61W | Tosafot=35L/180W | Y-Span=482/584pt (82.6%) | LineRectOcc=79.1% | InkOcc=84.5% | PageUtil=95.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 4 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-5) אינה נכנסת בשלמותה בעמוד 3 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (114 מילות מקור, 61 רש״י, 180 תוספות) בעמוד 3 ללא איבוד מילים.
+Page  4 (Daf ה׳): Main=17L/128W | Rashi= 7L/ 33W | Tosafot=18L/102W | Y-Span=374/584pt (64.0%) | LineRectOcc=62.7% | InkOcc=67.8% | PageUtil=96.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 4 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-6) אינה נכנסת בשלמותה בעמוד 4 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (128 מילות מקור, 33 רש״י, 102 תוספות) בעמוד 4 ללא איבוד מילים.
+Page  5 (Daf ו׳): Main= 6L/ 20W | Rashi=15L/ 66W | Tosafot=41L/473W | Y-Span=566/584pt (96.8%) | LineRectOcc=94.9% | InkOcc=113.3% | PageUtil=96.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 4 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; איזון תחתון דו-טורי (Available-Area): מתחת לגמרא רש״י ותוספות נפגשים באמצע העמוד בשני טורים ללא חפיפה. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-7) אינה נכנסת בשלמותה בעמוד 5 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (20 מילות מקור, 66 רש״י, 473 תוספות) בעמוד 5 ללא איבוד מילים.
+Page  6 (Daf ז׳): Main= 5L/ 28W | Rashi= 4L/ 17W | Tosafot=28L/341W | Y-Span=385/584pt (66.0%) | LineRectOcc=65.6% | InkOcc=77.5% | PageUtil=96.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 1 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-8) אינה נכנסת בשלמותה בעמוד 6 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (28 מילות מקור, 17 רש״י, 341 תוספות) בעמוד 6 ללא איבוד מילים.
+Page  7 (Daf ח׳): Main=17L/129W | Rashi=14L/ 63W | Tosafot=14L/ 78W | Y-Span=381/584pt (65.2%) | LineRectOcc=63.9% | InkOcc=70.2% | PageUtil=96.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 4 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-10) אינה נכנסת בשלמותה בעמוד 7 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (129 מילות מקור, 63 רש״י, 78 תוספות) בעמוד 7 ללא איבוד מילים.
+Page  8 (Daf ט׳): Main=22L/223W | Rashi= 3L/ 34W | Tosafot= 0L/  0W | Y-Span=435/584pt (74.5%) | LineRectOcc=73.5% | InkOcc=82.6% | PageUtil=96.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 1 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; Stage 2/4 Link-Aware Look-Ahead Solver: הקבוצה המקושרת (rav-group-11) אינה נכנסת בשלמותה בעמוד 8 — הועברה כמקשה אחת לעמוד הבא למניעת פיצול מקור ופירוש. ; Look-Ahead רב-עמודי: שובצו בפועל (223 מילות מקור, 34 רש״י, 0 תוספות) בעמוד 8 ללא איבוד מילים.
+Page  9 (Daf י׳): Main=21L/ 83W | Rashi=43L/173W | Tosafot=43L/269W | Y-Span=582/584pt (99.6%) | LineRectOcc=93.9% | InkOcc=104.2% | PageUtil=95.0%
+         Decisions: עטיפת ברך עליונה (Vilna Top-Wrap): 4 שורות מפרשים עוטפות את המקור מלמעלה ברצף מלא ללא חור מרכזי. ; איזון תחתון דו-טורי (Available-Area): מתחת לגמרא רש״י ותוספות נפגשים באמצע העמוד בשני טורים ללא חפיפה. ; Look-Ahead רב-עמודי: שובצו בפועל (83 מילות מקור, 173 רש״י, 269 תוספות) בעמוד 9 ללא איבוד מילים.
+Page 10 (Daf י״א): Main= 0L/  0W | Rashi=43L/263W | Tosafot=43L/398W | Y-Span=582/584pt (99.6%) | LineRectOcc=97.0% | InkOcc=117.1% | PageUtil=96.0%
+         Decisions: איזון תחתון דו-טורי (Available-Area): מתחת לגמרא רש״י ותוספות נפגשים באמצע העמוד בשני טורים ללא חפיפה. ; Look-Ahead רב-עמודי: שובצו בפועל (0 מילות מקור, 263 רש״י, 398 תוספות) בעמוד 10 ללא איבוד מילים.
+Page 11 (Daf י״ב): Main= 0L/  0W | Rashi= 8L/ 45W | Tosafot=43L/602W | Y-Span=582/584pt (99.6%) | LineRectOcc=99.4% | InkOcc=122.6% | PageUtil=82.0%
+         Decisions: איזון תחתון דו-טורי (Available-Area): מתחת לגמרא רש״י ותוספות נפגשים באמצע העמוד בשני טורים ללא חפיפה. ; Look-Ahead רב-עמודי: שובצו בפועל (0 מילות מקור, 45 רש״י, 602 תוספות) בעמוד 11 ללא איבוד מילים.
+Page 12 (Daf י״ג): Main= 0L/  0W | Rashi= 0L/  0W | Tosafot=13L/181W | Y-Span=177/584pt (30.4%) | LineRectOcc=30.9% | InkOcc=36.0% | PageUtil=90.0%
+         Decisions: Look-Ahead רב-עמודי: שובצו בפועל (0 מילות מקור, 0 רש״י, 181 תוספות) בעמוד 12 ללא איבוד מילים.
+
+Total Words Placed: Main=932, Rashi=835, Tosafot=2846, Total=4613
+Saved PDF to /app/applet/public/fixtures/kiddushin_before_12p.pdf (171976 bytes)
+Rendered all pages and contact_sheet_before.png to /app/applet/public/audit_before/

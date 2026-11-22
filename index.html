@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keter Typesetter — AI Holy-Book Typesetting Studio</title>
+    <meta name="description" content="Commercial-grade desktop typesetting system for Hebrew RTL holy books, featuring HarfBuzz shaping, Nikud & Taamim support, Rav-Text multi-commentary engines, dynamic knees, and print-ready output." />
+    <meta property="og:title" content="Keter Typesetter — AI Holy-Book Typesetting Studio" />
+    <meta property="og:description" content="Commercial-grade desktop typesetting system for Hebrew RTL holy books, featuring HarfBuzz shaping, Nikud & Taamim support, Rav-Text multi-commentary engines, dynamic knees, and print-ready output." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700;900&family=David+Libre:wght@400;500;700&family=Noto+Rashi+Hebrew:wght@400;600;700&family=Noto+Serif+Hebrew:wght@300;400;600;700;900&family=Tinos:ital,wght@0,400;0,700;1,400&family=Heebo:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('keter-ui-theme');
+          var theme = saved === 'night' ? 'night' : 'day';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'day');
+        }
+      })();
+    </script>
+    <script>
+      // Pre-hydration language (v0.2.0): mirrors the theme script above so the
+      // document lang/dir match the stored 'keter-ui-lang' before React mounts.
+      (function () {
+        try {
+          var savedLang = localStorage.getItem('keter-ui-lang');
+          var lang = savedLang === 'en' ? 'en' : 'he';
+          document.documentElement.setAttribute('lang', lang);
+          document.documentElement.setAttribute('dir', lang === 'en' ? 'ltr' : 'rtl');
+        } catch (e) {
+          document.documentElement.setAttribute('lang', 'he');
+          document.documentElement.setAttribute('dir', 'rtl');
+        }
+      })();
+    </script>
+  </head>
+  <body class="antialiased overflow-hidden select-none font-sans">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

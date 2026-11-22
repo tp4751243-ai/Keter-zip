@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@layer base {
+  /* Default Day Theme — Clean, Bright Classic Editorial Studio */
+  :root,
+  [data-theme="day"] {
+    --ui-app-bg: #F3F4F6;
+    --ui-workspace-bg: #E9EBEF;
+    --ui-surface: #FFFFFF;
+    --ui-surface-subtle: #F7F8FA;
+    --ui-surface-hover: #EEF1F6;
+    --ui-text-primary: #20242B;
+    --ui-text-secondary: #687180;
+    --ui-text-muted: #8C95A4;
+    --ui-border: #DDE1E7;
+    --ui-border-strong: #CBD2DC;
+    --ui-accent: #344A67;
+    --ui-accent-hover: #283A52;
+    --ui-accent-fg: #FFFFFF;
+    --ui-selected-bg: #E8EDF4;
+    --ui-selected-text: #243750;
+    --ui-selected-border: #B8C6D8;
+    --ui-page-bg: #FFFDF7;
+    --ui-page-border: #E7E1D5;
+    --ui-page-shadow: 0 20px 48px rgba(24, 32, 44, 0.11), 0 2px 8px rgba(24, 32, 44, 0.06), 0 0 0 1px #E7E1D5;
+    --ui-floating-shadow: 0 8px 28px rgba(24, 32, 44, 0.09), 0 1px 3px rgba(24, 32, 44, 0.05);
+    --ui-success: #2F6B4F;
+    --ui-success-bg: #EAF4EF;
+    --ui-warning: #8A5A2B;
+    --ui-warning-bg: #FBF3EB;
+    --ui-danger: #9E3B3B;
+    --ui-danger-bg: #FDECEC;
+    color-scheme: light;
+  }
+
+  /* Night Theme — Calm, Cool Slate Editorial Studio */
+  [data-theme="night"] {
+    --ui-app-bg: #171A1F;
+    --ui-workspace-bg: #121519;
+    --ui-surface: #1E232B;
+    --ui-surface-subtle: #171B22;
+    --ui-surface-hover: #262C36;
+    --ui-text-primary: #ECEFF4;
+    --ui-text-secondary: #9CA6B5;
+    --ui-text-muted: #6E7887;
+    --ui-border: #2B323D;
+    --ui-border-strong: #3A4352;
+    --ui-accent: #7D97B8;
+    --ui-accent-hover: #91A9C7;
+    --ui-accent-fg: #121519;
+    --ui-selected-bg: #26303D;
+    --ui-selected-text: #E2EBF5;
+    --ui-selected-border: #4A5D75;
+    --ui-page-bg: #FAF6EE;
+    --ui-page-border: #DDD5C7;
+    --ui-page-shadow: 0 26px 64px rgba(0, 0, 0, 0.58), 0 4px 14px rgba(0, 0, 0, 0.36), 0 0 0 1px #DDD5C7;
+    --ui-floating-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 1px 4px rgba(0, 0, 0, 0.28);
+    --ui-success: #4E9A74;
+    --ui-success-bg: rgba(47, 107, 79, 0.18);
+    --ui-warning: #C79252;
+    --ui-warning-bg: rgba(138, 90, 43, 0.18);
+    --ui-danger: #C96565;
+    --ui-danger-bg: rgba(158, 59, 59, 0.18);
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: "Heebo", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background-color: var(--ui-app-bg);
+    color: var(--ui-text-primary);
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  code, pre, .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom subtle scrollbars for the Keter Editorial Studio */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ui-workspace-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ui-border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-text-secondary);
+}

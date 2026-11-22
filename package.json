@@ -1,0 +1,101 @@
+{
+  "build": {
+    "appId": "com.keter.typesetter",
+    "copyright": "Copyright \u00a9 Keter Typesetter",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/**/*.map",
+      "!dist/audit_before/**/*",
+      "!dist/audit_after/**/*",
+      "!dist/fixtures/**/*",
+      "!dist/test_page_1.png",
+      "electron/**/*",
+      "package.json"
+    ],
+    "nsis": {
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "oneClick": false,
+      "shortcutName": "Keter Typesetter"
+    },
+    "productName": "Keter Typesetter",
+    "win": {
+      "artifactName": "${productName} Setup ${version}.${ext}",
+      "target": [
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "nsis"
+        }
+      ]
+    },
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US",
+      "he"
+    ]
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "harfbuzzjs": "^1.6.3",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.80",
+    "@types/express": "^4.17.21",
+    "@types/jszip": "^3.4.1",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@xmldom/xmldom": "^0.8.10",
+    "autoprefixer": "^10.4.21",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "playwright": "1.55.0",
+    "express": "^4.21.2",
+    "dotenv": "^17.2.3"
+  },
+  "main": "electron/main.cjs",
+  "name": "react-example",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "clean": "rm -rf dist server.js",
+    "desktop:build": "vite build && electron-builder --win nsis --x64 --publish never",
+    "desktop:dev": "vite --port=3000 --host=127.0.0.1",
+    "desktop:pack": "electron-builder --win nsis --x64 --publish never",
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "install:chromium": "playwright install chromium",
+    "lint": "tsc --noEmit",
+    "smoke:pdf": "tsx scripts/stage13a3-smoke.ts",
+    "smoke:partE": "tsx scripts/partE-smoke.ts",
+    "smoke:v080": "tsx scripts/v080-smoke.ts",
+    "smoke:partC": "tsx scripts/v090-partC-smoke.ts",
+    "smoke:v090a": "tsx scripts/v090-partA-smoke.ts",
+    "smoke:v090b": "tsx scripts/v090-partB-smoke.ts",
+    "smoke:v090c": "tsx scripts/v090-partC-smoke.ts",
+    "smoke:v090": "tsx scripts/v090-smoke.ts",
+    "smoke:v091": "tsx scripts/v091-smoke.ts",
+    "preview": "vite preview"
+  },
+  "type": "module",
+  "version": "0.9.9"
+}

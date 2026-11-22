@@ -1,0 +1,89 @@
+name: Stage 22B–23 Regression Loop
+
+on:
+  push:
+    branches:
+      - react
+  pull_request:
+    branches:
+      - react
+  workflow_dispatch:
+
+concurrency:
+  group: keter-typesetter-regression-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout consolidated React branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies (peer dependency conflict recorded in baseline)
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Stage 23 real DOCX import preservation audit
+        id: docxImport
+        continue-on-error: true
+        run: npx tsx scripts/stage23-docx-import-audit.ts
+      - name: Stage 22A real Berakhot content-preservation audit
+        id: berakhot
+        continue-on-error: true
+        run: npx tsx scripts/stage22a-berakhot-audit.ts
+      - name: Upload visual PDF and audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: berakhot-layout-preview
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: TypeScript baseline
+        id: typescript
+        continue-on-error: true
+        run: npm run lint
+      - name: Production build baseline
+        id: build
+        continue-on-error: true
+        run: npm run build
+      - name: Existing difficult-layout regression suite
+        id: layout
+        continue-on-error: true
+        run: |
+          npx tsx -e "import { LayoutTestSuite } from './src/engine/layout-test-suite.ts'; const r = LayoutTestSuite.runAllDifficultCases(); console.log(JSON.stringify({ allPassed: r.allPassed, passedCount: r.passedCount, totalCount: r.totalCount, cases: r.cases.map(c => ({ id: c.id, title: c.title, passed: c.passed, score: c.score, metricsSummary: c.metricsSummary })) }, null, 2)); if (!r.allPassed) process.exitCode = 1;"
+      - name: Existing engine/PDF regression assertions
+        id: engine
+        continue-on-error: true
+        run: |
+          npx tsx -e "import { LayoutTestSuite } from './src/engine/layout-test-suite.ts'; const r = LayoutTestSuite.runStage13A1Tests(); console.log(JSON.stringify({ allPassed: r.allPassed, passedCount: r.passedCount, totalCount: r.totalCount, assertions: r.assertions }, null, 2)); if (!r.allPassed) process.exitCode = 1;"
+      - name: Baseline summary
+        if: always()
+        run: |
+          {
+            echo "## Stage 22B–23 regression loop"
+            echo "- Dependency install: completed (using --legacy-peer-deps; package peer conflict remains unresolved)"
+            echo "- Real DOCX import preservation audit: ${{ steps.docxImport.outcome }}"
+            echo "- Berakhot content-preservation audit: ${{ steps.berakhot.outcome }}"
+            echo "- TypeScript: ${{ steps.typescript.outcome }}"
+            echo "- Production build: ${{ steps.build.outcome }}"
+            echo "- Difficult-layout suite: ${{ steps.layout.outcome }}"
+            echo "- Engine/PDF regression assertions: ${{ steps.engine.outcome }}"
+            echo "- Regression checks run against the consolidated React branch."
+            echo "- Gate requires the DOCX import audit, Berakhot audit, TypeScript, production build, difficult-layout suite, and engine/PDF assertions all to pass."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Gate Stage 22B–23 regression checks
+        if: always()
+        run: |
+          test "${{ steps.docxImport.outcome }}" = success
+          test "${{ steps.berakhot.outcome }}" = success
+          test "${{ steps.typescript.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
+          test "${{ steps.layout.outcome }}" = success
+          test "${{ steps.engine.outcome }}" = success

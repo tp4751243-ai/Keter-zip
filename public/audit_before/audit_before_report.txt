@@ -1,0 +1,71 @@
+Source segments: 43
+Commentary segments: 67 (Rashi: 44, Tosafot: 23)
+Discovered links: 19
+Unlinked commentaries: 48 / 67
+  [UNLINKED] primary_comment (u-1) DH="NONE" | Text="האשה נקנית - לבעלה:..."
+  [UNLINKED] primary_comment (u-2) DH="NONE" | Text="בשלוש דרכים - כדמפרש ואזיל והאי שלוש לשון נקבה הוא ובגמ..."
+  [UNLINKED] primary_comment (u-3) DH="NONE" | Text="וקונה את עצמה בשתי דרכים גרסי':..."
+  [LINKED]   primary_comment (u-4) DH="וקונה את עצמה" -> u-1 ("הָאִשָּׁה נִקְנֵית בְּשָׁלֹשׁ דְּרָכִים,...")
+  [UNLINKED] primary_comment (u-5) DH="NONE" | Text="בכסף ובשטר - מפרש בברייתא בגמ' (לקמן קידושין דף ה ע"ב) ..."
+  [UNLINKED] primary_comment (u-6) DH="NONE" | Text="טעמא דב"ש מפרש בגמ' (דף יא.):..."
+  [UNLINKED] primary_comment (u-7) DH="NONE" | Text="פרוטה - של נחושת:..."
+  [UNLINKED] primary_comment (u-8) DH="NONE" | Text="איסר האיטלקי - של כסף ודמיו שמנה פרוטות:..."
+  [UNLINKED] primary_comment (u-9) DH="NONE" | Text="היבמה נקנית - ליבם:..."
+  [UNLINKED] primary_comment (u-10) DH="NONE" | Text="בביאה - להיות כאשתו לכל דבר, שאם בא לגרשה אחר כך, אינה ..."
+  [LINKED]   primary_comment (u-11) DH="ומאי שנא התם" -> u-3 ("גְּמָ׳ הָאִשָּׁה נִקְנֵית. מַאי שְׁנָא ה...")
+  [LINKED]   primary_comment (u-12) DH="משום דקבעי למיתני" -> u-15 ("מַאי טַעְמָא תָּנֵי ״שָׁלֹשׁ״ – מִשּׁוּם...")
+  [UNLINKED] primary_comment (u-13) DH="NONE" | Text="וכסף מנלן - לאו הכא קא בעי לה אלא לקמן (קידושין דף ג ע"..."
+  [UNLINKED] primary_comment (u-14) DH="NONE" | Text="וניתני הכא האיש קונה - כי היכי דתני בלישנא דרבנן האיש מ..."
+  [UNLINKED] primary_comment (u-15) DH="NONE" | Text="וניתני - הכא האיש קונה בג' דרכים:..."
+  [UNLINKED] primary_comment (u-16) DH="NONE" | Text="ומקנה - אותה לעצמה בשתי דרכים. ומשני משום דאיכא בהנהו ב..."
+  [LINKED]   primary_comment (u-17) DH="בודקין את הזב" -> u-12 ("וְאֶלָּא הָא דְּתַנְיָא: ״בְּשִׁבְעָה דּ...")
+  [UNLINKED] primary_comment (u-18) DH="NONE" | Text="ופרכינן מ"ט תני שלוש - משום דרכים קאמרת:..."
+  [UNLINKED] primary_comment (u-19) DH="NONE" | Text="ליתני דברים וניתני שלושה - כי אורחא דגמרא:..."
+  [UNLINKED] primary_comment (u-20) DH="NONE" | Text="ותני תרתי משום חדא - בתמיה, שינה לשון כסף ושטר משום ביא..."
+  [UNLINKED] primary_comment (u-21) DH="NONE" | Text="הא מני - דתני לשון דרך בקדושי אשה ר"ש היא דאמר אורחא דא..."
+  [UNLINKED] primary_comment (u-22) DH="NONE" | Text="אבידה - אחת מצלעותיו:..."
+  [UNLINKED] primary_comment (u-23) DH="NONE" | Text="בג' דרכים - ערלה ורבעי נוהג בו כאילן ולעניין שביעית הול..."
+  [LINKED]   primary_comment (u-24) DH="ולירק בדרך אחד" -> u-20 ("וְהָא דִּתְנַן: ״אֶתְרוֹג שָׁוֶה לָאִילָ...")
+  [UNLINKED] primary_comment (u-25) DH="NONE" | Text="התם הא קמ"ל - דטעם דאזלינן ביה אחר לקיטה משום אורחא דמי..."
+  [UNLINKED] primary_comment (u-26) DH="NONE" | Text="מפני שדרכו ליגדל על כל המים - שמשקין אותו במים שאובין כ..."
+  [UNLINKED] primary_comment (u-27) DH="NONE" | Text="כוי - ספק חיה ספק בהמה:..."
+  [LINKED]   primary_comment (u-28) DH="יש בו דרכים" -> u-22 ("וְהָא דִּתְנַן: ״כּוֹי – יֵשׁ בּוֹ דְּרָ...")
+  [UNLINKED] primary_comment (u-29) DH="NONE" | Text="שוה לחיה - וטעון כיסוי דם:..."
+  [UNLINKED] primary_comment (u-30) DH="NONE" | Text="ולבהמה - חלבו אסור:..."
+  [UNLINKED] primary_comment (u-31) DH="NONE" | Text="ושוה לבהמה וחיה - טעון שחיטה:..."
+  [UNLINKED] primary_comment (u-32) DH="NONE" | Text="שאין שוה לא לחיה ולא לבהמה - אסור הרבעה עם בהמה וחיה:..."
+  [LINKED]   primary_comment (u-33) DH="זו אחת מן" -> u-22 ("וְהָא דִּתְנַן: ״כּוֹי – יֵשׁ בּוֹ דְּרָ...")
+  [UNLINKED] primary_comment (u-34) DH="NONE" | Text="דאיכא פלוגתא - חילוק בדרכיו בדרך זו הוא דומה לכאן ובדרך..."
+  [UNLINKED] primary_comment (u-35) DH="NONE" | Text="דיקא נמי - דהיכא דלא הוי ליה פלוגתא תנא לכל דבר:..."
+  [UNLINKED] primary_comment (u-36) DH="NONE" | Text="מניינא דרישא - ג' דרכים:..."
+  [UNLINKED] primary_comment (u-37) DH="NONE" | Text="מניינא דסיפא - וקונה את עצמה בשתי דרכים:..."
+  [UNLINKED] primary_comment (u-38) DH="NONE" | Text="למעוטי חופה - שאם מסרה לה אביה לחופה לשם קדושין אינה מק..."
+  [UNLINKED] primary_comment (u-39) DH="NONE" | Text="ולרב הונא כו' - לקמן בשמעתין (קידושין דף ה.):..."
+  [UNLINKED] primary_comment (u-40) DH="NONE" | Text="חליפין - קנין סודר:..."
+  [UNLINKED] primary_comment (u-41) DH="NONE" | Text="מה שדה מקניא בחליפין - דכתיב (רות ד׳:ח׳) וישלוף נעלו וה..."
+  [LINKED]   primary_comment (u-42) DH="חליפין איתנהו בפחות" -> u-27 ("וְאֵימָא הָכִי נָמֵי! חֲלִיפִין אִיתַנְה...")
+  [LINKED]   primary_comment (u-43) DH="לא מקניא נפשה" -> u-28 ("לָא מַקְנְיָא נַפְשַׁהּ....")
+  [LINKED]   primary_comment (u-44) DH="יציאה דכוותה קא" -> u-40 ("יְצִיאָה דִּכְווֹתַהּ קָא מְמַעֵט....")
+  [UNLINKED] secondary_comment (u-1) DH="NONE" | Text="האשה נקנית - הכא תני בה"א. וכן בכמה דוכתין, גבי איש ואש..."
+  [UNLINKED] secondary_comment (u-2) DH="NONE" | Text="ב"ש אומרים בדינר - במס' עדויות (פ"ד מ"ז) תני ליה גבי קו..."
+  [UNLINKED] secondary_comment (u-3) DH="NONE" | Text="בפרוטה ובשווה פרוטה - תימה: דלא הוה למיתני אלא בשווה פר..."
+  [LINKED]   secondary_comment (u-4) DH="וכמה היא פרוטה" -> u-1 ("הָאִשָּׁה נִקְנֵית בְּשָׁלֹשׁ דְּרָכִים,...")
+  [UNLINKED] secondary_comment (u-5) DH="NONE" | Text="אחד מח' באיסר - כשהאיסרים כדינם, אבל כשהאיסרים מתזיילין..."
+  [UNLINKED] secondary_comment (u-6) DH="NONE" | Text="איטלקי - מפרש ר"ת: על שם איטליא של יון ואין לתמוה על הק..."
+  [UNLINKED] secondary_comment (u-7) DH="NONE" | Text="היבמה נקנית כו' - תימה דלא תני מניינא כדלעיל, וליתני "נ..."
+  [LINKED]   secondary_comment (u-8) DH="מאי שנא הכא" -> u-3 ("גְּמָ׳ הָאִשָּׁה נִקְנֵית. מַאי שְׁנָא ה...")
+  [LINKED]   secondary_comment (u-9) DH="משום דקבעי למיתני" -> u-15 ("מַאי טַעְמָא תָּנֵי ״שָׁלֹשׁ״ – מִשּׁוּם...")
+  [UNLINKED] secondary_comment (u-10) DH="NONE" | Text="וכסף מנלן גמר קיחה קיחה משדה עפרון - ואם תאמר: ומה צריך..."
+  [UNLINKED] secondary_comment (u-11) DH="NONE" | Text="וכתיב התם נתתי כסף השדה קח ממני - אינו חושש אלא שמוצא ל..."
+  [UNLINKED] secondary_comment (u-12) DH="NONE" | Text="אי נמי שדות בכסף יקנו - והא דלא מייתי קנין שנכתב בתורה ..."
+  [LINKED]   secondary_comment (u-13) DH="דאסר לה אכולי" -> u-7 ("וְנִיתְנֵי הָתָם ״הָאִישׁ קוֹנֶה״! מֵעִי...")
+  [UNLINKED] secondary_comment (u-14) DH="NONE" | Text="אי תנא קונה ה"א בעל כרחה - ואע"ג דתני "האיש מקדש" דמשמע..."
+  [UNLINKED] secondary_comment (u-15) DH="NONE" | Text="ליתני שלושה - פירוש, משום דכל התורה כולה בלשון זכר נאמר..."
+  [LINKED]   secondary_comment (u-16) DH="קשו קראי אהדדי" -> u-12 ("וְאֶלָּא הָא דְּתַנְיָא: ״בְּשִׁבְעָה דּ...")
+  [UNLINKED] secondary_comment (u-17) DH="NONE" | Text="הכא דבתורה קאי ותורה איקרי לשון נקבה - וא"ת: מלחמה נמי ..."
+  [UNLINKED] secondary_comment (u-18) DH="NONE" | Text="[מפני מה אמרה תורה כי יקח וכו' - פירוש: דמשמע בעל כרחה ..."
+  [LINKED]   secondary_comment (u-19) DH="אתרוג שוה לאילן" -> u-20 ("וְהָא דִּתְנַן: ״אֶתְרוֹג שָׁוֶה לָאִילָ...")
+  [LINKED]   secondary_comment (u-20) DH="מה ירק דרכו" -> u-21 ("הָתָם הָא קָמַשְׁמַע לַן, דְּדַרְכֵּיהּ ...")
+  [LINKED]   secondary_comment (u-21) DH="לא לחיה ולא" -> u-22 ("וְהָא דִּתְנַן: ״כּוֹי – יֵשׁ בּוֹ דְּרָ...")
+  [UNLINKED] secondary_comment (u-22) DH="NONE" | Text="ואשה בפחות מש"פ לא מקניא נפשה - פי' בקונטרס משום דגנאי ..."
+  [LINKED]   secondary_comment (u-23) DH="יציאה דכוותה קא" -> u-40 ("יְצִיאָה דִּכְווֹתַהּ קָא מְמַעֵט....")

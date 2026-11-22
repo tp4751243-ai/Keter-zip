@@ -1,0 +1,40 @@
+name: LibreOffice Hebrew PDF comparison
+on:
+  push:
+    branches: [experiment/chromium-pdf-prototype]
+  workflow_dispatch:
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install LibreOffice, fonts, and PDF diagnostics
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-writer fonts-sil-charis fonts-liberation poppler-utils
+          mkdir -p "$HOME/.local/share/fonts" artifacts
+          cp public/fonts/FrankRuhlLibre-Regular.ttf "$HOME/.local/share/fonts/" 
+          cp public/fonts/FrankRuhlLibre-Bold.ttf "$HOME/.local/share/fonts/"
+          cp public/fonts/DavidLibre-Regular.ttf "$HOME/.local/share/fonts/"
+          fc-cache -f
+          fc-match "Frank Ruhl Libre"
+      - name: Install Python DOCX generator
+        run: python -m pip install --disable-pip-version-check python-docx
+      - name: Generate and inspect comparison PDF
+        run: python scripts/libreoffice-pdf-comparison.py
+      - name: Upload comparison artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libreoffice-hebrew-pdf-comparison
+          if-no-files-found: warn
+          path: |
+            artifacts/libreoffice-hebrew-comparison.docx
+            artifacts/libreoffice-hebrew-comparison.pdf
+            artifacts/libreoffice-extracted.txt
+            artifacts/libreoffice-extracted-normalized.txt
+            artifacts/libreoffice-pdffonts.txt
+            artifacts/libreoffice-bbox.html

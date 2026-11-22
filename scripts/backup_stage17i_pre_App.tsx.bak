@@ -1,0 +1,1677 @@
+/**
+ * Keter Typesetter — Commercial AI Jewish Holy-Book Desktop Typesetting System
+ * Professional Multi-Page Typesetting Studio for Hebrew RTL, Nikud, Taamim,
+ * Multiple Layout Paradigms (Single Column, Two Column, Top/Bottom, Vilna Rav-Text, Mikraot Gedolot),
+ * Real-time Dynamic Knee ("Berayim") Reflow, and High-Resolution PDF & IDML Exporters.
+ */
+
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import {
+  EditorialStudioHeader,
+  UiThemeMode,
+  PrimaryWorkMode,
+} from './components/EditorialStudioHeader';
+import { FloatingContextToolbar } from './components/FloatingContextToolbar';
+import { HomeWorkspaceView } from './components/HomeWorkspaceView';
+import { ExportWorkspaceView } from './components/ExportWorkspaceView';
+import { PageCanvas } from './components/PageCanvas';
+import { GlyphInspector } from './components/GlyphInspector';
+import { FontScannerPanel } from './components/FontScannerPanel';
+import { DocxImportModal } from './components/DocxImportModal';
+import { ContentEditorModal } from './components/ContentEditorModal';
+import { AutomatedTestPanel } from './components/AutomatedTestPanel';
+import { Milestone1ReportModal } from './components/Milestone1ReportModal';
+import { AiChatPanel } from './components/AiChatPanel';
+import { TypesettingRulesModal } from './components/TypesettingRulesModal';
+import { DesignTypesettingPanel, InspectorMainTab } from './components/DesignTypesettingPanel';
+import { PageNavigatorSidebar, LeftNavigatorTab } from './components/PageNavigatorSidebar';
+import { WorkspaceStatusBar } from './components/WorkspaceStatusBar';
+import { UnsavedChangesModal } from './components/UnsavedChangesModal';
+import { NewProjectModal } from './components/NewProjectModal';
+import { LicenseActivationModal } from './components/LicenseActivationModal';
+import {
+  CommercialLicenseEngine,
+  DevelopmentTestLicensingProvider,
+  StoredLicenseState,
+  UnconfiguredProductionLicensingProvider,
+} from './engine/license-engine';
+import { ProfessionalDesignSettings } from './types/design-settings';
+import { DesignSettingsEngine } from './engine/design-settings-engine';
+import { FontAnalyzerEngine } from './engine/font-analyzer';
+
+import {
+  BookLayoutType,
+  BookTypesetDocument,
+  ContentRole,
+  ContentUnit,
+  HebrewGlyph,
+  KneeCustomSettings,
+  PageGeometry,
+  PageTypesetResult,
+  ProjectSnapshot,
+  RavTextLink,
+  ShapedWord,
+} from './types/typesetter';
+import { PaginationEngine } from './engine/pagination-engine';
+import { DocxImporter } from './engine/docx-importer';
+import { PdfExporter } from './engine/pdf-exporter';
+import { IdmlExporter } from './engine/idml-exporter';
+import { QaEngine } from './engine/qa-engine';
+import {
+  ProjectPersistenceEngine,
+  RecentProjectItem,
+  UndoRedoHistoryManager,
+  UndoRedoSnapshotState,
+} from './engine/project-persistence';
+import {
+  LocalRuleOverride,
+  TypesettingRulesConfig,
+  TypesettingRulesEngine,
+  UserTypesettingRule,
+} from './engine/typesetting-rules-engine';
+import {
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
+
+type RightDrawerMode = 'design' | 'ai' | null;
+
+const DEFAULT_BERAKHOT_LINKS: RavTextLink[] = [
+  {
+    linkId: 'link-1',
+    sourceUnitId: 'unit-gemara-1',
+    commentaryUnitId: 'unit-rashi-1',
+    dibburHamatchil: 'מֵאֵימָתַי',
+    isUserLocked: true,
+    confidenceScore: 1.0,
+    sourceSnippet: 'מֵאֵימָתַי קוֹרִין אֶת שְׁמַע',
+    commentarySnippet: 'מֵאֵימָתַי: מֵאֵיזֶה זְמַן',
+    commentaryType: 'Rashi',
+  },
+  {
+    linkId: 'link-2',
+    sourceUnitId: 'unit-gemara-1',
+    commentaryUnitId: 'unit-tosafot-1',
+    dibburHamatchil: 'מֵאֵימָתַי קוֹרִין',
+    isUserLocked: false,
+    confidenceScore: 0.95,
+    sourceSnippet: 'מֵאֵימָתַי קוֹרִין אֶת שְׁמַע',
+    commentarySnippet: 'מֵאֵימָתַי קוֹרִין: תָּנָא הֵיכָא קָאֵי',
+    commentaryType: 'Tosafot',
+  },
+];
+
+interface InitialBootState {
+  snapshot: ProjectSnapshot;
+  designSettings: ProfessionalDesignSettings;
+  recoveredFromAutosave: boolean;
+  recoveredFromBackup: boolean;
+}
+
+function loadInitialBootState(): InitialBootState {
+  const recovery = ProjectPersistenceEngine.loadAutosaveWithRecovery();
+  if (recovery.snapshot) {
+    const restoredDesign = ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(
+      recovery.snapshot
+    );
+    return {
+      snapshot: recovery.snapshot,
+      designSettings: restoredDesign,
+      recoveredFromAutosave: true,
+      recoveredFromBackup: recovery.recoveredFromBackup,
+    };
+  }
+
+  const defaultDesign = DesignSettingsEngine.createDefaultSettings({
+    projectId: 'project-berakhot-1',
+    layoutType: 'rav_text',
+    sourceFontFamily: 'Frank Ruhl Libre',
+    rashiFontFamily: 'Noto Rashi Hebrew',
+    tosafotFontFamily: 'Frank Ruhl Libre',
+  });
+
+  const defaultSnapshot: ProjectSnapshot = {
+    id: 'init-berakhot',
+    timestamp: Date.now(),
+    label: 'פרויקט התחלתי: מסכת ברכות',
+    documentTitle: 'מסכת ברכות — דף ב ע״א',
+    layoutType: 'rav_text',
+    geometry: defaultDesign.layout.geometry,
+    units: DocxImporter.getSampleBerakhot(),
+    links: DEFAULT_BERAKHOT_LINKS,
+    kneeSettings: defaultDesign.ravText.kneeSettings,
+    selectedFont: 'Frank Ruhl Libre',
+    selectedRashiFont: 'Noto Rashi Hebrew',
+    selectedTosafotFont: 'Frank Ruhl Libre',
+    sourceFontSize: defaultDesign.roleStyles.main_source.character.fontSizePt,
+    commentaryFontSize: defaultDesign.roleStyles.primary_comment.character.fontSizePt,
+    enableOrnaments: true,
+    currentPageIndex: 0,
+    projectRules: [],
+    localOverrides: [],
+    designSettings: defaultDesign,
+    projectMetadata: {
+      projectId: defaultDesign.projectId || 'project-berakhot-1',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      appVersion: '2.5.0-stage15',
+    },
+  };
+
+  return {
+    snapshot: defaultSnapshot,
+    designSettings: defaultDesign,
+    recoveredFromAutosave: false,
+    recoveredFromBackup: false,
+  };
+}
+
+export default function App() {
+  const initialBootRef = useRef<InitialBootState | null>(null);
+  if (!initialBootRef.current) {
+    initialBootRef.current = loadInitialBootState();
+  }
+  const boot = initialBootRef.current;
+
+  // 1. Document & Layout State (Initialized from recovered autosave or default project)
+  const [documentTitle, setDocumentTitle] = useState<string>(boot.snapshot.documentTitle);
+  const [layoutType, setLayoutType] = useState<BookLayoutType>(boot.snapshot.layoutType);
+  const [selectedFont, setSelectedFont] = useState<string>(boot.snapshot.selectedFont);
+  const [selectedRashiFont, setSelectedRashiFont] = useState<string>(
+    boot.snapshot.selectedRashiFont
+  );
+  const [selectedTosafotFont, setSelectedTosafotFont] = useState<string>(
+    boot.snapshot.selectedTosafotFont
+  );
+  const [enableOrnaments, setEnableOrnaments] = useState<boolean>(
+    boot.snapshot.enableOrnaments ?? true
+  );
+  const [contentUnits, setContentUnits] = useState<ContentUnit[]>(boot.snapshot.units);
+
+  // Dynamic Knee Custom Settings
+  const [kneeSettings, setKneeSettings] = useState<KneeCustomSettings>(boot.snapshot.kneeSettings);
+
+  // Rav-Text Semantic Links
+  const [ravTextLinks, setRavTextLinks] = useState<RavTextLink[]>(boot.snapshot.links);
+
+  // 2. Multi-Page Navigation State
+  const [currentPageIndex, setCurrentPageIndex] = useState<number>(
+    boot.snapshot.currentPageIndex ?? 0
+  );
+
+  // 3. Viewport & Display Settings — Default 1.15x (115%) comfortable reading scale on desktop
+  const [zoom, setZoom] = useState<number>(1.15);
+  const [showBaselines, setShowBaselines] = useState<boolean>(true);
+  const [showAnchors, setShowAnchors] = useState<boolean>(false);
+  const [showKneeGuide, setShowKneeGuide] = useState<boolean>(true);
+  const [showLinks, setShowLinks] = useState<boolean>(true);
+
+  // Stage 17G: Three Real Primary Work Modes: 'home' (כניסה), 'edit' (עריכה), 'export' (ייצוא)
+  const [activeWorkMode, setActiveWorkMode] = useState<PrimaryWorkMode>('edit');
+  const [recentProjects, setRecentProjects] = useState<RecentProjectItem[]>(() =>
+    ProjectPersistenceEngine.getRecentProjects()
+  );
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+
+  // 3.5 Classic Editorial Day/Night Theme State (Default: 'day' for first-time users, persisted)
+  const [uiTheme, setUiTheme] = useState<UiThemeMode>(() => {
+    try {
+      const saved = localStorage.getItem('keter-ui-theme');
+      return saved === 'night' ? 'night' : 'day';
+    } catch {
+      return 'day';
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', uiTheme);
+    try {
+      localStorage.setItem('keter-ui-theme', uiTheme);
+    } catch {
+      // ignore storage errors
+    }
+  }, [uiTheme]);
+
+  const handleToggleUiTheme = useCallback(() => {
+    setUiTheme(prev => (prev === 'day' ? 'night' : 'day'));
+  }, []);
+
+  // 4. On-Demand Dismissible Studio Drawers (closed by default so the book page is the hero)
+  const [isNavigatorOpen, setIsNavigatorOpen] = useState<boolean>(false);
+  const [navigatorTab, setNavigatorTab] = useState<LeftNavigatorTab>('pages');
+  const [navigatorWidth, setNavigatorWidth] = useState<number>(272);
+
+  const [rightDrawerMode, setRightDrawerMode] = useState<RightDrawerMode>(null);
+  const [inspectorMainTab, setInspectorMainTab] = useState<InspectorMainTab>('typography');
+  const [rightDockWidth, setRightDockWidth] = useState<number>(360);
+
+  // Resizing interaction state
+  const resizingSideRef = useRef<'navigator' | 'inspector' | null>(null);
+  const resizeStartXRef = useRef<number>(0);
+  const resizeStartWidthRef = useRef<number>(0);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingSideRef.current) return;
+      const deltaX = e.clientX - resizeStartXRef.current;
+      if (resizingSideRef.current === 'navigator') {
+        const nextW = Math.max(210, Math.min(420, resizeStartWidthRef.current - deltaX));
+        setNavigatorWidth(nextW);
+      } else if (resizingSideRef.current === 'inspector') {
+        const nextW = Math.max(310, Math.min(520, resizeStartWidthRef.current + deltaX));
+        setRightDockWidth(nextW);
+      }
+    };
+    const handleMouseUp = () => {
+      resizingSideRef.current = null;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  // 5. Modal Visibility & Unsaved Changes Lifecycle Guard
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
+  const [isContentEditorOpen, setIsContentEditorOpen] = useState<boolean>(false);
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
+  const [isFontScannerOpen, setIsFontScannerOpen] = useState<boolean>(false);
+  const [isDocxModalOpen, setIsDocxModalOpen] = useState<boolean>(false);
+  const [isTestPanelOpen, setIsTestPanelOpen] = useState<boolean>(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState<boolean>(false);
+
+  // Stage 16: Commercial License & Activation State
+  const devLicensingProviderRef = useRef<DevelopmentTestLicensingProvider>(
+    new DevelopmentTestLicensingProvider()
+  );
+  const prodLicensingProviderRef = useRef<UnconfiguredProductionLicensingProvider>(
+    new UnconfiguredProductionLicensingProvider()
+  );
+  const [licenseState, setLicenseState] = useState<StoredLicenseState>(
+    () => CommercialLicenseEngine.loadLicenseState().state
+  );
+
+  // Pending action blocked by unsaved changes dialog
+  const [pendingProtectedAction, setPendingProtectedAction] = useState<{
+    descriptionHe: string;
+    execute: () => void;
+  } | null>(null);
+
+  // Hidden file input fallback for importing native .keter.json project files
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Stage 13: Authoritative Shared Design & Typesetting Settings State
+  const [designSettings, setDesignSettings] = useState<ProfessionalDesignSettings>(
+    boot.designSettings
+  );
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [selectedWordInfo, setSelectedWordInfo] = useState<{
+    unitId: string;
+    wordIndex: number;
+    wordText: string;
+    role: ContentRole;
+  } | null>(null);
+
+  const availableFonts = useMemo(() => FontAnalyzerEngine.getAvailableSystemFonts(), []);
+
+  const selectedUnit = useMemo(
+    () => contentUnits.find(u => u.id === selectedUnitId) ?? null,
+    [contentUnits, selectedUnitId]
+  );
+
+  // Stage 12 Centralized Typesetting Rules Engine State
+  const [globalUserRules, setGlobalUserRules] = useState<UserTypesettingRule[]>(
+    () => TypesettingRulesEngine.loadGlobalUserRuleSet().rules
+  );
+  const [projectRules, setProjectRules] = useState<UserTypesettingRule[]>(
+    boot.snapshot.projectRules ?? []
+  );
+  const [localOverrides, setLocalOverrides] = useState<LocalRuleOverride[]>(
+    boot.snapshot.localOverrides ?? []
+  );
+
+  const rulesConfig: TypesettingRulesConfig = useMemo(
+    () =>
+      TypesettingRulesEngine.createConfig({
+        userRules: globalUserRules,
+        projectRules,
+        localOverrides,
+      }),
+    [globalUserRules, projectRules, localOverrides]
+  );
+
+  // Export Progress & Status Notifications
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(
+    null
+  );
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: 'success' | 'error';
+  } | null>(null);
+
+  // Autosave status tracking
+  const [lastAutosaveTimestamp, setLastAutosaveTimestamp] = useState<number | null>(
+    boot.recoveredFromAutosave ? boot.snapshot.timestamp : null
+  );
+  const [recoveredFromAutosave] = useState<boolean>(boot.recoveredFromAutosave);
+
+  // Glyph Inspector State
+  const [inspectedGlyph, setInspectedGlyph] = useState<HebrewGlyph | null>(null);
+  const [inspectedWord, setInspectedWord] = useState<ShapedWord | null>(null);
+  const [hoveredLinkId, setHoveredLinkId] = useState<string | null>(null);
+
+  // Page Geometry: Controlled by shared designSettings.layout.geometry (default 482 x 680 pt)
+  const geometry: PageGeometry = useMemo(
+    () =>
+      designSettings?.layout?.geometry ??
+      boot.snapshot.geometry ?? {
+        pageWidth: 482.0,
+        pageHeight: 680.0,
+        marginTop: 48.0,
+        marginBottom: 48.0,
+        marginInside: 46.0,
+        marginOutside: 42.0,
+        isVerso: false,
+      },
+    [designSettings, boot.snapshot.geometry]
+  );
+
+  // Application-Wide Undo / Redo History Manager & Saved Baseline Tracking
+  const [historyVersion, setHistoryVersion] = useState<number>(0);
+  const [baselineVersion, setBaselineVersion] = useState<number>(0);
+  const isApplyingUndoRedoRef = useRef<boolean>(false);
+  const lastActionLabelRef = useRef<{ label: string; key: string; coalesce: boolean }>({
+    label: 'שינוי במסמך',
+    key: 'edit',
+    coalesce: true,
+  });
+
+  const currentSnapshotState: UndoRedoSnapshotState = useMemo(
+    () => ({
+      documentTitle,
+      layoutType,
+      geometry,
+      contentUnits,
+      explicitLinks: ravTextLinks,
+      kneeSettings,
+      sourceFontSize:
+        designSettings?.roleStyles?.main_source?.character?.fontSizePt ??
+        (layoutType === 'mikraot_gedolot' ? 16 : 14.5),
+      commentaryFontSize:
+        designSettings?.roleStyles?.primary_comment?.character?.fontSizePt ?? 10.5,
+      selectedFont,
+      selectedRashiFont,
+      selectedTosafotFont,
+      enableOrnaments,
+      currentPageIndex,
+      projectRules,
+      localOverrides,
+      designSettings,
+    }),
+    [
+      documentTitle,
+      layoutType,
+      geometry,
+      contentUnits,
+      ravTextLinks,
+      kneeSettings,
+      selectedFont,
+      selectedRashiFont,
+      selectedTosafotFont,
+      enableOrnaments,
+      currentPageIndex,
+      projectRules,
+      localOverrides,
+      designSettings,
+    ]
+  );
+
+  const historyManagerRef = useRef<UndoRedoHistoryManager | null>(null);
+  if (!historyManagerRef.current) {
+    historyManagerRef.current = new UndoRedoHistoryManager(currentSnapshotState);
+  }
+
+  // Last saved baseline snapshot for accurate dirty state detection
+  const lastSavedBaselineRef = useRef<ProjectSnapshot | null>(null);
+  if (!lastSavedBaselineRef.current) {
+    lastSavedBaselineRef.current = UndoRedoHistoryManager.toProjectSnapshot(
+      currentSnapshotState,
+      'מצב שמור התחלתי'
+    );
+  }
+
+  const currentProjectSnapshot: ProjectSnapshot = useMemo(
+    () =>
+      UndoRedoHistoryManager.toProjectSnapshot(
+        currentSnapshotState,
+        lastActionLabelRef.current.label
+      ),
+    [currentSnapshotState]
+  );
+
+  // Track whether current project has unsaved changes relative to lastSavedBaseline
+  const isDirty: boolean = useMemo(() => {
+    void baselineVersion;
+    return ProjectPersistenceEngine.isSnapshotDirty(
+      currentProjectSnapshot,
+      lastSavedBaselineRef.current
+    );
+  }, [currentProjectSnapshot, baselineVersion]);
+
+  // Warn before browser tab/window close when there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // Record meaningful document/layout/formatting/editor changes into UndoRedoHistoryManager
+  // AND persist real editable project state to Autosave (with last-known-good backup)
+  useEffect(() => {
+    const snapshotToAutosave = UndoRedoHistoryManager.toProjectSnapshot(
+      currentSnapshotState,
+      lastActionLabelRef.current.label
+    );
+    const savedOk = ProjectPersistenceEngine.saveAutosave(snapshotToAutosave);
+    if (savedOk) {
+      setLastAutosaveTimestamp(snapshotToAutosave.timestamp);
+    }
+
+    if (isApplyingUndoRedoRef.current) {
+      isApplyingUndoRedoRef.current = false;
+      return;
+    }
+    const mgr = historyManagerRef.current;
+    if (!mgr) return;
+    const { label, key, coalesce } = lastActionLabelRef.current;
+    const changed = mgr.recordChange(currentSnapshotState, label, key, coalesce);
+    if (changed) {
+      setHistoryVersion(v => v + 1);
+    }
+    lastActionLabelRef.current = {
+      label: 'עריכת מסמך / עימוד',
+      key: 'edit',
+      coalesce: true,
+    };
+  }, [currentSnapshotState]);
+
+  const applySnapshotState = useCallback((snap: UndoRedoSnapshotState) => {
+    isApplyingUndoRedoRef.current = true;
+    setDocumentTitle(snap.documentTitle);
+    setLayoutType(snap.layoutType);
+    setContentUnits(snap.contentUnits);
+    if (snap.explicitLinks) {
+      setRavTextLinks(snap.explicitLinks);
+    }
+    setKneeSettings(snap.kneeSettings);
+    setSelectedFont(snap.selectedFont);
+    setSelectedRashiFont(snap.selectedRashiFont);
+    setSelectedTosafotFont(snap.selectedTosafotFont);
+    setEnableOrnaments(snap.enableOrnaments ?? true);
+    setCurrentPageIndex(snap.currentPageIndex ?? 0);
+    setProjectRules(snap.projectRules ?? []);
+    setLocalOverrides(snap.localOverrides ?? []);
+    if (snap.designSettings) {
+      setDesignSettings({
+        ...snap.designSettings,
+        layout: {
+          ...snap.designSettings.layout,
+          layoutType: snap.layoutType,
+          geometry: snap.geometry ?? snap.designSettings.layout.geometry,
+        },
+      });
+    }
+    setHistoryVersion(v => v + 1);
+  }, []);
+
+  // Load a complete ProjectSnapshot as a fresh project session (resetting Undo/Redo baseline)
+  const loadProjectSnapshotIntoWorkspace = useCallback(
+    (snapshot: ProjectSnapshot, markCleanBaseline: boolean = true) => {
+      const restoredDesign = ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(snapshot);
+      const nextState: UndoRedoSnapshotState = {
+        documentTitle: snapshot.documentTitle,
+        layoutType: snapshot.layoutType,
+        geometry: restoredDesign.layout.geometry,
+        contentUnits: snapshot.units,
+        explicitLinks: snapshot.links ?? [],
+        kneeSettings: snapshot.kneeSettings,
+        sourceFontSize:
+          snapshot.sourceFontSize ??
+          restoredDesign.roleStyles.main_source.character.fontSizePt,
+        commentaryFontSize:
+          snapshot.commentaryFontSize ??
+          restoredDesign.roleStyles.primary_comment.character.fontSizePt,
+        selectedFont: snapshot.selectedFont,
+        selectedRashiFont: snapshot.selectedRashiFont,
+        selectedTosafotFont: snapshot.selectedTosafotFont,
+        enableOrnaments: snapshot.enableOrnaments ?? true,
+        currentPageIndex: snapshot.currentPageIndex ?? 0,
+        projectRules: snapshot.projectRules ?? [],
+        localOverrides: snapshot.localOverrides ?? [],
+        designSettings: restoredDesign,
+      };
+
+      isApplyingUndoRedoRef.current = true;
+      setDocumentTitle(nextState.documentTitle);
+      setLayoutType(nextState.layoutType);
+      setContentUnits(nextState.contentUnits);
+      setRavTextLinks(nextState.explicitLinks ?? []);
+      setKneeSettings(nextState.kneeSettings);
+      setSelectedFont(nextState.selectedFont);
+      setSelectedRashiFont(nextState.selectedRashiFont);
+      setSelectedTosafotFont(nextState.selectedTosafotFont);
+      setEnableOrnaments(nextState.enableOrnaments);
+      setCurrentPageIndex(nextState.currentPageIndex);
+      setProjectRules(nextState.projectRules ?? []);
+      setLocalOverrides(nextState.localOverrides ?? []);
+      setDesignSettings(restoredDesign);
+      setSelectedUnitId(null);
+      setSelectedWordInfo(null);
+
+      historyManagerRef.current?.reset(nextState);
+      setHistoryVersion(v => v + 1);
+
+      if (markCleanBaseline) {
+        lastSavedBaselineRef.current = UndoRedoHistoryManager.toProjectSnapshot(
+          nextState,
+          snapshot.label || snapshot.documentTitle
+        );
+        setBaselineVersion(v => v + 1);
+      }
+
+      ProjectPersistenceEngine.saveAutosave(
+        UndoRedoHistoryManager.toProjectSnapshot(nextState, snapshot.label || snapshot.documentTitle)
+      );
+    },
+    []
+  );
+
+  // Unified handler for updating designSettings from either UI panel or AI Chat
+  const handleUpdateDesignSettings = useCallback(
+    (nextSettings: ProfessionalDesignSettings, summaryHe: string = 'עדכון הגדרות עיצוב') => {
+      lastActionLabelRef.current = {
+        label: summaryHe,
+        key: `design-settings-${nextSettings.revision}`,
+        coalesce: false,
+      };
+      setDesignSettings(nextSettings);
+      if (nextSettings.layout.layoutType !== layoutType) {
+        setLayoutType(nextSettings.layout.layoutType);
+      }
+      if (nextSettings.roleStyles.main_source.character.fontFamily !== selectedFont) {
+        setSelectedFont(nextSettings.roleStyles.main_source.character.fontFamily);
+      }
+      if (nextSettings.roleStyles.primary_comment.character.fontFamily !== selectedRashiFont) {
+        setSelectedRashiFont(nextSettings.roleStyles.primary_comment.character.fontFamily);
+      }
+      if (nextSettings.roleStyles.secondary_comment.character.fontFamily !== selectedTosafotFont) {
+        setSelectedTosafotFont(nextSettings.roleStyles.secondary_comment.character.fontFamily);
+      }
+      if (nextSettings.ravText.kneeSettings) {
+        setKneeSettings(nextSettings.ravText.kneeSettings);
+      }
+    },
+    [layoutType, selectedFont, selectedRashiFont, selectedTosafotFont]
+  );
+
+  // 6. CORE TYPESETTING: Multi-page document calculation consuming shared designSettings
+  const bookDoc: BookTypesetDocument = useMemo(() => {
+    return PaginationEngine.paginateDocument({
+      title: documentTitle,
+      layoutType,
+      units: contentUnits,
+      links: ravTextLinks,
+      geometry,
+      sourceFontSize:
+        designSettings?.roleStyles?.main_source?.character?.fontSizePt ??
+        (layoutType === 'mikraot_gedolot' ? 16 : 14.5),
+      commentaryFontSize:
+        designSettings?.roleStyles?.primary_comment?.character?.fontSizePt ?? 10.5,
+      kneeSettings,
+      sourceFontFamily: selectedFont,
+      rashiFontFamily: selectedRashiFont,
+      tosafotFontFamily: selectedTosafotFont,
+      enableOrnaments,
+      rulesConfig,
+      projectRules,
+      localOverrides,
+      designSettings,
+    });
+  }, [
+    documentTitle,
+    layoutType,
+    contentUnits,
+    ravTextLinks,
+    geometry,
+    kneeSettings,
+    selectedFont,
+    selectedRashiFont,
+    selectedTosafotFont,
+    enableOrnaments,
+    rulesConfig,
+    projectRules,
+    localOverrides,
+    designSettings,
+  ]);
+
+  // Safe active page clamping
+  const totalPages = Math.max(1, bookDoc.pages.length);
+  const safePageIndex = Math.min(currentPageIndex, totalPages - 1);
+  const activePage: PageTypesetResult = bookDoc.pages[safePageIndex] || bookDoc.pages[0];
+
+  // 7. Post-Import Integrity Check & Preflight QA
+  const validationReport = useMemo(() => {
+    return DocxImporter.validateDocumentIntegrity(contentUnits, ravTextLinks);
+  }, [contentUnits, ravTextLinks]);
+
+  const qaReport = useMemo(() => {
+    return QaEngine.runFullQa(activePage);
+  }, [activePage]);
+
+  // Show auto-dismissing toast notification
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  }, []);
+
+  // Show initial recovery notice if recovered from backup
+  useEffect(() => {
+    if (boot.recoveredFromBackup) {
+      showToast(
+        'השמירה האוטומטית האחרונה נפגמה — שוחזרה הגרסה התקינה האחרונה (Last Known Good)',
+        'success'
+      );
+    }
+  }, [boot.recoveredFromBackup, showToast]);
+
+  const handleUndo = useCallback(() => {
+    const mgr = historyManagerRef.current;
+    if (!mgr || !mgr.canUndo()) return;
+    const label = mgr.getLastUndoLabel() || 'פעולה אחרונה';
+    const restored = mgr.undo();
+    if (restored) {
+      applySnapshotState(restored);
+      showToast(`בוטל: ${label} (Ctrl+Z)`, 'success');
+    }
+  }, [applySnapshotState, showToast]);
+
+  const handleRedo = useCallback(() => {
+    const mgr = historyManagerRef.current;
+    if (!mgr || !mgr.canRedo()) return;
+    const label = mgr.getLastRedoLabel() || 'פעולה אחרונה';
+    const restored = mgr.redo();
+    if (restored) {
+      applySnapshotState(restored);
+      showToast(`בוצע מחדש: ${label} (Ctrl+Y)`, 'success');
+    }
+  }, [applySnapshotState, showToast]);
+
+  // Save/Export native .keter project file using real desktop file operation
+  const handleSaveProjectFile = useCallback(async (): Promise<boolean> => {
+    const snapshot = UndoRedoHistoryManager.toProjectSnapshot(
+      currentSnapshotState,
+      `שמירה יזומה: ${documentTitle}`
+    );
+    ProjectPersistenceEngine.saveVersionSnapshot(snapshot);
+    ProjectPersistenceEngine.saveAutosave(snapshot);
+    const result = await ProjectPersistenceEngine.saveProjectFileDesktop(snapshot);
+    if (result.saved) {
+      lastSavedBaselineRef.current = snapshot;
+      setBaselineVersion(v => v + 1);
+      setLastAutosaveTimestamp(snapshot.timestamp);
+      setRecentProjects(ProjectPersistenceEngine.getRecentProjects());
+      showToast(`קובץ הפרויקט (${result.fileName}) נשמר בהצלחה!`, 'success');
+      return true;
+    }
+    return false;
+  }, [currentSnapshotState, documentTitle, showToast]);
+
+  // Guard helper that prompts UnsavedChangesModal if current project is dirty
+  const runWithUnsavedChangesGuard = useCallback(
+    (descriptionHe: string, action: () => void) => {
+      if (isDirty) {
+        setPendingProtectedAction({
+          descriptionHe,
+          execute: action,
+        });
+      } else {
+        action();
+      }
+    },
+    [isDirty]
+  );
+
+  // Load/Import native .keter / .keter.json File object with strict validation & non-destructive error handling
+  const loadValidatedProjectFile = useCallback(
+    async (file: File) => {
+      try {
+        const snapshot = await ProjectPersistenceEngine.importKeterProjectFile(file);
+        loadProjectSnapshotIntoWorkspace(snapshot, true);
+        const updatedRecent = ProjectPersistenceEngine.recordRecentProject(
+          snapshot,
+          file.name
+        );
+        setRecentProjects(updatedRecent);
+        setEditingUnitId(null);
+        setActiveWorkMode('edit');
+        showToast(`פרויקט "${snapshot.documentTitle}" נטען ושוחזר במלואו!`, 'success');
+      } catch (err: any) {
+        // Never discard or corrupt the currently open project when loading fails
+        showToast(err.message || 'שגיאה בטעינת קובץ פרויקט (.keter)', 'error');
+      }
+    },
+    [loadProjectSnapshotIntoWorkspace, showToast]
+  );
+
+  const handleImportProjectFileInput = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      await loadValidatedProjectFile(file);
+    },
+    [loadValidatedProjectFile]
+  );
+
+  // Trigger Open Project File (guarded for unsaved changes)
+  const handleRequestOpenProjectFile = useCallback(() => {
+    runWithUnsavedChangesGuard('פתיחת קובץ פרויקט אחר (.keter)', async () => {
+      if (typeof (window as any).showOpenFilePicker === 'function') {
+        const file = await ProjectPersistenceEngine.openProjectFilePickerDesktop();
+        if (file) {
+          await loadValidatedProjectFile(file);
+        }
+      } else {
+        projectFileInputRef.current?.click();
+      }
+    });
+  }, [runWithUnsavedChangesGuard, loadValidatedProjectFile]);
+
+  // Trigger New Project Modal (guarded for unsaved changes)
+  const handleRequestNewProject = useCallback(() => {
+    runWithUnsavedChangesGuard('יצירת פרויקט חדש', () => {
+      setIsNewProjectModalOpen(true);
+    });
+  }, [runWithUnsavedChangesGuard]);
+
+  // Trigger DOCX Import Modal (guarded for unsaved changes)
+  const handleRequestOpenDocx = useCallback(() => {
+    runWithUnsavedChangesGuard('ייבוא קובץ Word (DOCX) חדש', () => {
+      setIsDocxModalOpen(true);
+    });
+  }, [runWithUnsavedChangesGuard]);
+
+  // Create New Project from NewProjectModal or Home Mode
+  const handleCreateNewProject = useCallback(
+    (title: string, nextLayoutType: BookLayoutType, mode: 'blank' | 'sample') => {
+      let units: ContentUnit[] = [];
+      let links: RavTextLink[] = [];
+
+      if (mode === 'sample') {
+        if (nextLayoutType === 'single_column') {
+          units = DocxImporter.getSampleMussarSingleColumn();
+        } else if (nextLayoutType === 'two_column') {
+          units = DocxImporter.getSampleShulchanAruchTwoColumn();
+        } else if (nextLayoutType === 'source_top_commentary_bottom') {
+          units = DocxImporter.getSampleMishnahBerurahTopBottom();
+        } else if (nextLayoutType === 'mikraot_gedolot') {
+          units = DocxImporter.getSampleBereishit();
+        } else {
+          units = DocxImporter.getSampleBerakhot();
+          links = DEFAULT_BERAKHOT_LINKS;
+        }
+      }
+
+      const newSnapshot = ProjectPersistenceEngine.createNewProjectSnapshot({
+        documentTitle: title,
+        layoutType: nextLayoutType,
+        units,
+        links,
+      });
+
+      setIsNewProjectModalOpen(false);
+      loadProjectSnapshotIntoWorkspace(newSnapshot, true);
+      setRecentProjects(ProjectPersistenceEngine.recordRecentProject(newSnapshot));
+      setEditingUnitId(null);
+      setActiveWorkMode('edit');
+      showToast(`פרויקט חדש "${title}" נוצר בהצלחה!`, 'success');
+    },
+    [loadProjectSnapshotIntoWorkspace, showToast]
+  );
+
+  // In-Place Canvas Text Edit Commit Handler (preserves unit ID, role, links, footnotes, and undo/redo history)
+  const handleCommitInPlaceUnitEdit = useCallback(
+    (unitId: string, newRawText: string) => {
+      const targetUnit = contentUnits.find(u => u.id === unitId);
+      if (!targetUnit) {
+        setEditingUnitId(null);
+        return;
+      }
+      if (newRawText.trim() === targetUnit.rawText.trim()) {
+        setEditingUnitId(null);
+        return;
+      }
+      const { units: updatedUnits, links: updatedLinks } =
+        ProjectPersistenceEngine.updateContentUnitText(
+          contentUnits,
+          ravTextLinks,
+          unitId,
+          newRawText
+        );
+      lastActionLabelRef.current = {
+        label: `עריכת טקסט במקום (${unitId})`,
+        key: `inline-edit-${unitId}`,
+        coalesce: false,
+      };
+      setContentUnits(updatedUnits);
+      setRavTextLinks(updatedLinks);
+      setEditingUnitId(null);
+      showToast('הטקסט עודכן במקום והעמוד עומד מחדש!', 'success');
+    },
+    [contentUnits, ravTextLinks, showToast]
+  );
+
+  // Global keyboard shortcuts for Undo, Redo, Save, New Project, and Page Up/Down navigation
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTextInput =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+      if (isTextInput) return;
+
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      if (isCtrlOrMeta) {
+        const key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          handleUndo();
+        } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          handleRedo();
+        } else if (key === 's') {
+          e.preventDefault();
+          void handleSaveProjectFile();
+        } else if (key === 'n') {
+          e.preventDefault();
+          handleRequestNewProject();
+        } else if (key === 'o') {
+          e.preventDefault();
+          handleRequestOpenDocx();
+        }
+        return;
+      }
+
+      if (e.key === 'PageDown') {
+        e.preventDefault();
+        setCurrentPageIndex(prev => Math.min(totalPages - 1, prev + 1));
+      } else if (e.key === 'PageUp') {
+        e.preventDefault();
+        setCurrentPageIndex(prev => Math.max(0, prev - 1));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    handleUndo,
+    handleRedo,
+    handleSaveProjectFile,
+    handleRequestNewProject,
+    handleRequestOpenDocx,
+    totalPages,
+  ]);
+
+  const canUndo = useMemo(() => {
+    void historyVersion;
+    return historyManagerRef.current?.canUndo() ?? false;
+  }, [historyVersion]);
+
+  const canRedo = useMemo(() => {
+    void historyVersion;
+    return historyManagerRef.current?.canRedo() ?? false;
+  }, [historyVersion]);
+
+  const undoLabel = useMemo(() => {
+    void historyVersion;
+    return historyManagerRef.current?.getLastUndoLabel();
+  }, [historyVersion]);
+
+  const redoLabel = useMemo(() => {
+    void historyVersion;
+    return historyManagerRef.current?.getLastRedoLabel();
+  }, [historyVersion]);
+
+  // Handle Layout Switcher (Strictly non-destructive to user's source content and title)
+  const handleLayoutTypeChange = (newLayout: BookLayoutType) => {
+    lastActionLabelRef.current = {
+      label: `שינוי תבנית עימוד (${newLayout})`,
+      key: 'layout-type',
+      coalesce: false,
+    };
+    setLayoutType(newLayout);
+    setDesignSettings(prev =>
+      DesignSettingsEngine.updateLayoutSettings(prev, { layoutType: newLayout }, 'user')
+    );
+    setCurrentPageIndex(0);
+  };
+
+  // Handle Save from Content Editor
+  const handleSaveCustomContent = (
+    newUnits: ContentUnit[],
+    newTitle: string,
+    suggestedLayout?: BookLayoutType
+  ) => {
+    lastActionLabelRef.current = {
+      label: `עריכת תוכן: ${newTitle}`,
+      key: 'content-editor-save',
+      coalesce: false,
+    };
+    setContentUnits(newUnits);
+    setDocumentTitle(newTitle);
+    if (suggestedLayout && suggestedLayout !== layoutType) {
+      setLayoutType(suggestedLayout);
+      setDesignSettings(prev =>
+        DesignSettingsEngine.updateLayoutSettings(prev, { layoutType: suggestedLayout }, 'user')
+      );
+    }
+    // Prune links whose units were explicitly deleted, while preserving all valid links
+    const validIds = new Set(newUnits.map(u => u.id));
+    setRavTextLinks(prev =>
+      prev.filter(l => validIds.has(l.sourceUnitId) && validIds.has(l.commentaryUnitId))
+    );
+    setCurrentPageIndex(0);
+    showToast('התוכן עודכן והספר עומד מחדש בהצלחה!', 'success');
+  };
+
+  // Export PDF Trigger (All pages or active page)
+  const handleExportPdf = async (allPages: boolean = true) => {
+    setIsExportingPdf(true);
+    setExportProgress({ current: 1, total: allPages ? totalPages : 1 });
+
+    try {
+      let blob: Blob;
+      let filename = '';
+
+      if (allPages) {
+        blob = await PdfExporter.generateMultiPagePdf(bookDoc, (current, total) => {
+          setExportProgress({ current, total });
+        });
+        filename = `${documentTitle.replace(/\s+/g, '_')}_ספר_מלא_${totalPages}_עמודים.pdf`;
+      } else {
+        blob = await PdfExporter.generatePrintPdf(
+          activePage,
+          `${documentTitle} — דף ${activePage.pageNumberHebrew}`
+        );
+        filename = `${documentTitle.replace(/\s+/g, '_')}_דף_${activePage.pageNumberHebrew}.pdf`;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showToast(
+        `קובץ PDF הופק בהצלחה (${allPages ? `${totalPages} עמודים` : 'עמוד 1'})!`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast('שגיאה בהפקת PDF: ' + (err.message || err), 'error');
+    } finally {
+      setIsExportingPdf(false);
+      setExportProgress(null);
+    }
+  };
+
+  // Export IDML Trigger
+  const handleExportIdml = async (
+    stage:
+      | 'test_a_minimal'
+      | 'test_b_styled_lines'
+      | 'test_c_rav_text'
+      | 'test_d_multi_page'
+      | 'test_e_full'
+      | 'test_f_true_rav_text_flow' = 'test_f_true_rav_text_flow'
+  ) => {
+    try {
+      const blob =
+        stage === 'test_e_full' || stage === 'test_f_true_rav_text_flow'
+          ? await IdmlExporter.generateMultiPageIdml(bookDoc)
+          : await IdmlExporter.generateIncrementalStageIdml(bookDoc, stage);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const suffix =
+        stage === 'test_a_minimal'
+          ? 'TEST_A_Minimal_Berakhot'
+          : stage === 'test_f_true_rav_text_flow'
+          ? 'TEST_F_True_RavText_Flow_InDesign'
+          : `${stage}_InDesign`;
+      a.download = `${documentTitle.replace(/\s+/g, '_')}_${suffix}.idml`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showToast(
+        stage === 'test_a_minimal'
+          ? 'קובץ IDML מינימלי ידוע-כתקין (TEST A — מסכת ברכות) הופק בהצלחה!'
+          : `קובץ IDML זרימת רב-טקסט אמיתית ל-Adobe InDesign (${totalPages} עמודים) הופק בהצלחה!`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast('שגיאה בהפקת IDML: ' + (err.message || err), 'error');
+    }
+  };
+
+  // Handle Glyph Selection from Canvas
+  const handleSelectGlyph = useCallback((glyph: HebrewGlyph, word: ShapedWord) => {
+    setInspectedGlyph(glyph);
+    setInspectedWord(word);
+  }, []);
+
+  // Handle AI Adjustment Approval
+  const handleApplyAiAdjustment = (action: string, data: any) => {
+    if (action === 'adjust_knee' && data?.kneeJunctionY) {
+      const nextKnee: KneeCustomSettings = {
+        ...kneeSettings,
+        mode: 'manual',
+        junctionPercent: Math.round((data.kneeJunctionY / geometry.pageHeight) * 100),
+      };
+      setKneeSettings(nextKnee);
+      setDesignSettings(prev =>
+        DesignSettingsEngine.updateRavTextSettings(prev, { kneeSettings: nextKnee }, 'ai')
+      );
+      setShowKneeGuide(true);
+      showToast('התאמת הברך הוחלה בהצלחה לפי המלצת AI', 'success');
+    } else if (action === 'adjust_spacing' && data?.gutter) {
+      const nextKnee: KneeCustomSettings = {
+        ...kneeSettings,
+        gutterWidth: data.gutter,
+      };
+      setKneeSettings(nextKnee);
+      setDesignSettings(prev =>
+        DesignSettingsEngine.updateRavTextSettings(
+          prev,
+          { kneeSettings: nextKnee, gutterWidthPt: data.gutter },
+          'ai'
+        )
+      );
+      showToast('מרווח העמודות (Gutter) עודכן בהצלחה', 'success');
+    }
+  };
+
+  // Helper to toggle on-demand right drawer ('design' | 'ai')
+  const toggleRightDrawer = (mode: 'design' | 'ai', tab?: InspectorMainTab) => {
+    if (tab) {
+      setInspectorMainTab(tab);
+    }
+    if (rightDrawerMode === mode && !tab) {
+      setRightDrawerMode(null);
+    } else {
+      setRightDrawerMode(mode);
+    }
+  };
+
+  return (
+    <div
+      data-theme={uiTheme}
+      className="h-screen w-screen flex flex-col bg-[var(--ui-app-bg)] text-[var(--ui-text-primary)] overflow-hidden font-sans select-none transition-colors duration-150"
+    >
+      {/* Hidden input fallback for loading .keter / .keter.json project files */}
+      <input
+        ref={projectFileInputRef}
+        type="file"
+        accept=".keter,.keter.json,.json"
+        onChange={handleImportProjectFileInput}
+        className="hidden"
+      />
+
+      {/* 1. Compact Editorial Studio Header (One Top Bar with 3 Real Work Modes: כניסה | עריכה | ייצוא) */}
+      <EditorialStudioHeader
+        activeWorkMode={activeWorkMode}
+        onWorkModeChange={mode => {
+          setEditingUnitId(null);
+          setActiveWorkMode(mode);
+        }}
+        documentTitle={documentTitle}
+        isModified={isDirty}
+        layoutType={layoutType}
+        onLayoutTypeChange={handleLayoutTypeChange}
+        currentPage={safePageIndex + 1}
+        totalPages={totalPages}
+        currentPageHebrew={activePage.pageNumberHebrew}
+        isNavigatorOpen={isNavigatorOpen}
+        onToggleNavigator={() => setIsNavigatorOpen(!isNavigatorOpen)}
+        isInspectorOpen={rightDrawerMode === 'design'}
+        onToggleInspector={() => toggleRightDrawer('design')}
+        isAiDrawerOpen={rightDrawerMode === 'ai'}
+        onToggleAiDrawer={() => toggleRightDrawer('ai')}
+        onNewProject={handleRequestNewProject}
+        onOpenDocx={handleRequestOpenDocx}
+        onOpenContentEditor={() => setIsContentEditorOpen(true)}
+        onSaveProjectFile={() => void handleSaveProjectFile()}
+        onLoadProjectFile={handleRequestOpenProjectFile}
+        onExportPdf={handleExportPdf}
+        onExportIdml={() => handleExportIdml('test_f_true_rav_text_flow')}
+        isExportingPdf={isExportingPdf}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        undoLabel={undoLabel}
+        redoLabel={redoLabel}
+        onOpenFontScanner={() => setIsFontScannerOpen(true)}
+        onOpenRulesModal={() => setIsRulesModalOpen(true)}
+        onOpenTests={() => setIsTestPanelOpen(true)}
+        onOpenReport={() => setIsReportModalOpen(true)}
+        onOpenLicense={() => setIsLicenseModalOpen(true)}
+        licenseStatus={licenseState.status}
+        isVerifiedCommercialLicense={licenseState.isVerifiedCommercialLicense}
+        showBaselines={showBaselines}
+        onToggleBaselines={() => setShowBaselines(!showBaselines)}
+        showKneeGuide={showKneeGuide}
+        onToggleKneeGuide={() => setShowKneeGuide(!showKneeGuide)}
+        uiTheme={uiTheme}
+        onToggleUiTheme={handleToggleUiTheme}
+      />
+
+      {/* 2. Primary Workspace Content Switched by Active Work Mode (כניסה | עריכה | ייצוא) */}
+      {activeWorkMode === 'home' && (
+        <HomeWorkspaceView
+          currentTitle={documentTitle}
+          currentLayoutType={layoutType}
+          totalPages={totalPages}
+          totalUnits={contentUnits.length}
+          isDirty={isDirty}
+          lastAutosaveTimestamp={lastAutosaveTimestamp}
+          recoveredFromAutosave={recoveredFromAutosave}
+          recentProjects={recentProjects}
+          licenseState={licenseState}
+          onContinueActiveProject={() => setActiveWorkMode('edit')}
+          onCreateNewProject={(title, nextLayout, mode) => {
+            runWithUnsavedChangesGuard('יצירת פרויקט חדש', () => {
+              handleCreateNewProject(title, nextLayout, mode);
+            });
+          }}
+          onOpenProjectFileDialog={handleRequestOpenProjectFile}
+          onLoadProjectFileDirect={file => {
+            runWithUnsavedChangesGuard('פתיחת קובץ פרויקט (.keter)', () => {
+              void loadValidatedProjectFile(file);
+            });
+          }}
+          onLoadRecentProject={snap => {
+            runWithUnsavedChangesGuard(`פתיחת פרויקט "${snap.documentTitle}"`, () => {
+              loadProjectSnapshotIntoWorkspace(snap, true);
+              setRecentProjects(ProjectPersistenceEngine.recordRecentProject(snap));
+              setEditingUnitId(null);
+              setActiveWorkMode('edit');
+              showToast(`הפרויקט "${snap.documentTitle}" נטען בהצלחה!`, 'success');
+            });
+          }}
+          onRemoveRecentProject={projectId => {
+            setRecentProjects(ProjectPersistenceEngine.removeRecentProject(projectId));
+          }}
+          onSaveActiveProject={() => void handleSaveProjectFile()}
+          onImportDocxUnits={(units, title, links, nextLayout) => {
+            runWithUnsavedChangesGuard('ייבוא קובצי Word (DOCX)', () => {
+              const importedSnapshot = ProjectPersistenceEngine.createNewProjectSnapshot({
+                documentTitle: title,
+                layoutType: nextLayout,
+                units,
+                links: links ?? [],
+                selectedFont,
+                selectedRashiFont,
+                selectedTosafotFont,
+                geometry,
+              });
+              loadProjectSnapshotIntoWorkspace(importedSnapshot, true);
+              setRecentProjects(
+                ProjectPersistenceEngine.recordRecentProject(importedSnapshot)
+              );
+              setEditingUnitId(null);
+              setActiveWorkMode('edit');
+              showToast('קובצי ה-DOCX יובאו בהצלחה ועומדו לספר!', 'success');
+            });
+          }}
+          onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
+        />
+      )}
+
+      {activeWorkMode === 'export' && (
+        <ExportWorkspaceView
+          bookDoc={bookDoc}
+          activePage={activePage}
+          currentPageIndex={safePageIndex}
+          onSelectPage={idx => setCurrentPageIndex(idx)}
+          validationReport={validationReport}
+          qaScore={qaReport.qualityScore}
+          qaIssues={qaReport.issues}
+          isDirty={isDirty}
+          isExportingPdf={isExportingPdf}
+          exportProgress={exportProgress}
+          onExportPdf={handleExportPdf}
+          onExportIdml={() => handleExportIdml('test_f_true_rav_text_flow')}
+          onSaveProjectFile={() => void handleSaveProjectFile()}
+          onReturnToEdit={() => setActiveWorkMode('edit')}
+          onOpenRulesModal={() => setIsRulesModalOpen(true)}
+        />
+      )}
+
+      {activeWorkMode === 'edit' && (
+        <div dir="rtl" className="flex-1 flex overflow-hidden relative bg-[var(--ui-workspace-bg)]">
+          {/* 2A. Optional Navigation Drawer (Disappears completely when closed) */}
+          <PageNavigatorSidebar
+            pages={bookDoc.pages}
+            currentPageIndex={safePageIndex}
+            onSelectPage={idx => setCurrentPageIndex(idx)}
+            units={contentUnits}
+            links={ravTextLinks}
+            validation={validationReport}
+            selectedUnitId={selectedUnitId}
+            onSelectUnit={unitId => setSelectedUnitId(unitId)}
+            layoutType={layoutType}
+            isOpen={isNavigatorOpen}
+            onToggleOpen={() => setIsNavigatorOpen(false)}
+            activeTab={navigatorTab}
+            onTabChange={setNavigatorTab}
+            widthPx={navigatorWidth}
+          />
+
+          {isNavigatorOpen && (
+            <div
+              onMouseDown={e => {
+                resizingSideRef.current = 'navigator';
+                resizeStartXRef.current = e.clientX;
+                resizeStartWidthRef.current = navigatorWidth;
+              }}
+              className="w-1 bg-[var(--ui-border)] hover:bg-[var(--ui-accent)] cursor-col-resize transition-colors shrink-0 z-30"
+              title="גרור לשינוי רוחב מגירת הניווט"
+            />
+          )}
+
+          {/* 2B. Primary Book Canvas with Floating Contextual Toolbar */}
+          <div className="flex-1 flex flex-col overflow-hidden relative bg-[var(--ui-workspace-bg)]">
+            {/* Floating Contextual Formatting Toolbar near the active page */}
+            <div className="pt-3.5 pb-1 flex justify-center shrink-0 z-20 bg-[var(--ui-workspace-bg)] transition-colors duration-150">
+              <FloatingContextToolbar
+                designSettings={designSettings}
+                onUpdateDesignSettings={handleUpdateDesignSettings}
+                availableFonts={availableFonts}
+                selectedUnit={selectedUnit}
+                selectedWordInfo={selectedWordInfo}
+                onClearSelection={() => {
+                  setSelectedUnitId(null);
+                  setSelectedWordInfo(null);
+                }}
+                currentPageIndex={safePageIndex}
+                layoutType={layoutType}
+                showKneeGuide={showKneeGuide}
+                onToggleKneeGuide={() => setShowKneeGuide(!showKneeGuide)}
+                onOpenInspectorTab={tab => toggleRightDrawer('design', tab)}
+                onEditSelectedUnit={unitId => setEditingUnitId(unitId)}
+              />
+            </div>
+
+            <PageCanvas
+              typesetResult={activePage}
+              zoom={zoom}
+              showBaselines={showBaselines}
+              showAnchors={showAnchors}
+              showKneeGuide={showKneeGuide}
+              showLinks={showLinks}
+              onSelectGlyph={handleSelectGlyph}
+              hoveredLinkId={hoveredLinkId}
+              onHoverLink={setHoveredLinkId}
+              onZoomChange={setZoom}
+              selectedFont={selectedFont}
+              selectedRashiFont={selectedRashiFont}
+              selectedTosafotFont={selectedTosafotFont}
+              selectedUnitId={selectedUnitId}
+              onSelectUnit={unitId => setSelectedUnitId(unitId)}
+              onSelectWord={(unitId, wordIndex, wordText, role) =>
+                setSelectedWordInfo({ unitId, wordIndex, wordText, role })
+              }
+              units={contentUnits}
+              editingUnitId={editingUnitId}
+              onStartEditUnit={unitId => setEditingUnitId(unitId)}
+              onCancelEditUnit={() => setEditingUnitId(null)}
+              onCommitEditUnit={handleCommitInPlaceUnitEdit}
+            />
+          </div>
+
+          {/* Resizable Splitter for Optional Inspector / AI Drawer */}
+          {rightDrawerMode !== null && (
+            <div
+              onMouseDown={e => {
+                resizingSideRef.current = 'inspector';
+                resizeStartXRef.current = e.clientX;
+                resizeStartWidthRef.current = rightDockWidth;
+              }}
+              className="w-1 bg-[var(--ui-border)] hover:bg-[var(--ui-accent)] cursor-col-resize transition-colors shrink-0 z-30"
+              title="גרור לשינוי רוחב החלונית"
+            />
+          )}
+
+          {/* 2C. Optional Contextual Inspector Drawer or AI Drawer (Disappears completely when closed) */}
+          {rightDrawerMode === 'design' && (
+            <div
+              style={{ width: `${rightDockWidth}px` }}
+              className="h-full shrink-0 z-30 shadow-[var(--ui-floating-shadow)] overflow-hidden"
+            >
+              <DesignTypesettingPanel
+                designSettings={designSettings}
+                onUpdateDesignSettings={handleUpdateDesignSettings}
+                availableFonts={availableFonts}
+                selectedUnit={selectedUnit}
+                selectedWordInfo={selectedWordInfo}
+                onClearSelectedWord={() => setSelectedWordInfo(null)}
+                currentPageIndex={safePageIndex}
+                totalPages={totalPages}
+                activeMainTab={inspectorMainTab}
+                onMainTabChange={setInspectorMainTab}
+                knee={activePage.knee}
+                kneeSettings={kneeSettings}
+                onUpdateKneeSettings={nextKnee => {
+                  setKneeSettings(nextKnee);
+                  setDesignSettings(prev =>
+                    DesignSettingsEngine.updateRavTextSettings(
+                      prev,
+                      {
+                        kneeSettings: nextKnee,
+                        gutterWidthPt: nextKnee.gutterWidth,
+                        upperCollarLines: nextKnee.upperKneeLines,
+                      },
+                      'user'
+                    )
+                  );
+                }}
+                onClose={() => setRightDrawerMode(null)}
+                onStartEditUnit={unitId => setEditingUnitId(unitId)}
+              />
+            </div>
+          )}
+
+          {rightDrawerMode === 'ai' && (
+            <div
+              style={{ width: `${rightDockWidth}px` }}
+              className="h-full shrink-0 z-30 shadow-[var(--ui-floating-shadow)] overflow-hidden"
+            >
+              <AiChatPanel
+                isDocked={true}
+                onClose={() => setRightDrawerMode(null)}
+                onApplyAdjustment={handleApplyAiAdjustment}
+                designSettings={designSettings}
+                onUpdateDesignSettings={handleUpdateDesignSettings}
+                selectedUnitId={selectedUnitId}
+                currentDocumentInfo={{
+                  title: documentTitle,
+                  layoutPreset: layoutType,
+                  kneeJunction: activePage.knee.kneeJunctionY,
+                  qualityScore: qaReport.qualityScore,
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Compact Bottom Editorial Status & Navigation Strip */}
+      <WorkspaceStatusBar
+        activePage={activePage}
+        currentPageIndex={safePageIndex}
+        totalPages={totalPages}
+        onSelectPage={idx => setCurrentPageIndex(idx)}
+        zoom={zoom}
+        onZoomChange={setZoom}
+        layoutType={layoutType}
+        totalUnits={validationReport.totalUnits}
+        totalLinks={ravTextLinks.length}
+        selectedUnitId={selectedUnitId}
+        selectedUnitRole={selectedUnit?.role}
+        selectedWordText={selectedWordInfo?.wordText}
+        qaScore={qaReport.qualityScore}
+        qaIssues={qaReport.issues}
+        isExportingPdf={isExportingPdf}
+        exportProgress={exportProgress}
+        designRevision={designSettings.revision}
+        lastSavedLabel={undoLabel}
+        lastAutosaveTimestamp={lastAutosaveTimestamp}
+        isDirty={isDirty}
+        recoveredFromAutosave={recoveredFromAutosave}
+        onOpenKneeInspector={() => toggleRightDrawer('design', 'rav_text')}
+        onOpenRulesModal={() => setIsRulesModalOpen(true)}
+        onOpenTests={() => setIsTestPanelOpen(true)}
+        onToggleAiChat={() => toggleRightDrawer('ai')}
+        isAiChatOpen={rightDrawerMode === 'ai'}
+      />
+
+      {/* 6. Glyph & OpenType Anchor Inspector Floating Panel */}
+      <GlyphInspector
+        glyph={inspectedGlyph}
+        word={inspectedWord}
+        onClose={() => {
+          setInspectedGlyph(null);
+          setInspectedWord(null);
+        }}
+      />
+
+      {/* 7. Toast Notification */}
+      {notification && (
+        <div
+          className={`fixed bottom-11 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-[var(--ui-floating-shadow)] text-xs font-medium border transition-all ${
+            notification.type === 'success'
+              ? 'bg-[var(--ui-surface)] text-[var(--ui-text-primary)] border-[var(--ui-border)]'
+              : 'bg-[var(--ui-danger-bg)] text-[var(--ui-danger)] border-[var(--ui-danger)]/35'
+          }`}
+        >
+          {notification.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-[var(--ui-success)] shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-[var(--ui-danger)] shrink-0" />
+          )}
+          <span>{notification.message}</span>
+        </div>
+      )}
+
+      {/* 8. PDF Export Loading Overlay */}
+      {isExportingPdf && exportProgress && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-xl p-6 max-w-sm w-full shadow-[var(--ui-floating-shadow)] flex flex-col items-center text-center space-y-3">
+            <Loader2 className="w-8 h-8 text-[var(--ui-accent)] animate-spin" />
+            <h3 className="text-sm font-semibold text-[var(--ui-text-primary)]">
+              מייצא PDF ברזולוציה גבוהה לדפוס
+            </h3>
+            <p className="text-xs text-[var(--ui-text-secondary)]">
+              מעבד עמוד {exportProgress.current} מתוך {exportProgress.total} באיכות 300 DPI...
+            </p>
+            <div className="w-full bg-[var(--ui-surface-subtle)] rounded-full h-2 overflow-hidden border border-[var(--ui-border)]">
+              <div
+                className="bg-[var(--ui-accent)] h-full transition-all duration-200"
+                style={{
+                  width: `${Math.round((exportProgress.current / exportProgress.total) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Modals */}
+      {pendingProtectedAction && (
+        <UnsavedChangesModal
+          documentTitle={documentTitle}
+          actionDescriptionHe={pendingProtectedAction.descriptionHe}
+          onSaveAndContinue={async () => {
+            const action = pendingProtectedAction.execute;
+            setPendingProtectedAction(null);
+            const saved = await handleSaveProjectFile();
+            if (saved) {
+              action();
+            }
+          }}
+          onDiscardAndContinue={() => {
+            const action = pendingProtectedAction.execute;
+            setPendingProtectedAction(null);
+            action();
+          }}
+          onCancel={() => setPendingProtectedAction(null)}
+        />
+      )}
+
+      {isNewProjectModalOpen && (
+        <NewProjectModal
+          onClose={() => setIsNewProjectModalOpen(false)}
+          onCreateProject={handleCreateNewProject}
+        />
+      )}
+
+      {isContentEditorOpen && (
+        <ContentEditorModal
+          currentUnits={contentUnits}
+          currentTitle={documentTitle}
+          layoutType={layoutType}
+          onClose={() => setIsContentEditorOpen(false)}
+          onSave={handleSaveCustomContent}
+        />
+      )}
+
+      {isFontScannerOpen && (
+        <FontScannerPanel
+          onClose={() => setIsFontScannerOpen(false)}
+          selectedFont={selectedFont}
+          onSelectFont={f => {
+            setSelectedFont(f);
+            setDesignSettings(
+              prev =>
+                DesignSettingsEngine.updateRoleStyle(
+                  prev,
+                  'main_source',
+                  { character: { fontFamily: f } },
+                  'user'
+                ).settings
+            );
+          }}
+          selectedRashiFont={selectedRashiFont}
+          onSelectRashiFont={f => {
+            setSelectedRashiFont(f);
+            setDesignSettings(
+              prev =>
+                DesignSettingsEngine.updateRoleStyle(
+                  prev,
+                  'primary_comment',
+                  { character: { fontFamily: f } },
+                  'user'
+                ).settings
+            );
+          }}
+          selectedTosafotFont={selectedTosafotFont}
+          onSelectTosafotFont={f => {
+            setSelectedTosafotFont(f);
+            setDesignSettings(
+              prev =>
+                DesignSettingsEngine.updateRoleStyle(
+                  prev,
+                  'secondary_comment',
+                  { character: { fontFamily: f } },
+                  'user'
+                ).settings
+            );
+          }}
+        />
+      )}
+
+      {isDocxModalOpen && (
+        <DocxImportModal
+          onClose={() => setIsDocxModalOpen(false)}
+          onImportUnits={(units, title, links) => {
+            const importedSnapshot = ProjectPersistenceEngine.createNewProjectSnapshot({
+              documentTitle: title,
+              layoutType,
+              units,
+              links: links ?? [],
+              selectedFont,
+              selectedRashiFont,
+              selectedTosafotFont,
+              geometry,
+            });
+            loadProjectSnapshotIntoWorkspace(importedSnapshot, true);
+            showToast('קובץ DOCX יובא בהצלחה ועומד לספר!', 'success');
+          }}
+        />
+      )}
+
+      {isTestPanelOpen && <AutomatedTestPanel onClose={() => setIsTestPanelOpen(false)} />}
+
+      {isReportModalOpen && <Milestone1ReportModal onClose={() => setIsReportModalOpen(false)} />}
+
+      {isLicenseModalOpen && (
+        <LicenseActivationModal
+          licenseState={licenseState}
+          onUpdateLicenseState={setLicenseState}
+          devProvider={devLicensingProviderRef.current}
+          prodProvider={prodLicensingProviderRef.current}
+          onClose={() => setIsLicenseModalOpen(false)}
+          onNotify={showToast}
+        />
+      )}
+
+      {isRulesModalOpen && (
+        <TypesettingRulesModal
+          rulesConfig={rulesConfig}
+          projectRules={projectRules}
+          localOverrides={localOverrides}
+          onUpdateGlobalUserRules={nextRules => {
+            setGlobalUserRules(nextRules);
+            TypesettingRulesEngine.saveGlobalUserRuleSet({
+              rules: nextRules,
+              updatedAt: Date.now(),
+            });
+            showToast('חוקי משתמש גלובליים נשמרו בהצלחה!', 'success');
+          }}
+          onUpdateProjectRules={nextProjRules => {
+            lastActionLabelRef.current = {
+              label: 'עדכון חוקי עימוד בפרויקט',
+              key: 'project-rules',
+              coalesce: false,
+            };
+            setProjectRules(nextProjRules);
+          }}
+          onUpdateLocalOverrides={nextLocalOverrides => {
+            lastActionLabelRef.current = {
+              label: 'עדכון דריסת חוק מקומית',
+              key: 'local-overrides',
+              coalesce: false,
+            };
+            setLocalOverrides(nextLocalOverrides);
+          }}
+          onResetGlobalDefaults={() => {
+            lastActionLabelRef.current = {
+              label: 'איפוס חוקי עימוד לברירת מחדל מקצועית',
+              key: 'reset-rules',
+              coalesce: false,
+            };
+            setGlobalUserRules([]);
+            setProjectRules([]);
+            setLocalOverrides([]);
+            TypesettingRulesEngine.resetGlobalUserRuleSet();
+            showToast('כל חוקי העימוד אופסו לברירות המחדל המקצועיות!', 'success');
+          }}
+          onClose={() => setIsRulesModalOpen(false)}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Keter Typesetter — AI Holy-Book Typesetting Studio",
+  "description": "Commercial-grade desktop typesetting system for Hebrew RTL holy books, featuring HarfBuzz shaping, Nikud & Taamim support, Rav-Text multi-commentary engines, dynamic knees, and print-ready output.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
