@@ -24,6 +24,7 @@ import {
   normalizeExportUnits,
   unitPlainText,
 } from './text-exporter';
+import { paraIsRtl, splitByScript, stripDirectionalMarks } from './docx-rtl';
 
 function escapeXml(s: string): string {
   return s
@@ -90,23 +91,51 @@ function roleIsBold(role: string): boolean {
 
 const WORD_FONT = 'Frank Ruhl Libre';
 
-/** One text run; `text` may contain \n which become <w:br/>. */
+/**
+ * Text runs; `text` may contain \n which become <w:br/>.
+ * Layout training T4 (hebrew-document-generator rules, docx-rtl.ts): the
+ * text is split into runs by script, Hebrew runs carry <w:rtl/>, Latin
+ * and digit runs never do; every run sets the complex-script font/size,
+ * and bold/italic set w:bCs/w:iCs too (Word applies w:b only to Latin);
+ * directional marks are stripped (Word draws them as boxes).
+ */
 function runXml(text: string, opts: { bold?: boolean; sizeHp?: number; italic?: boolean } = {}): string {
-  const parts = text.split('\n');
-  const rPr = [
-    `<w:rFonts w:ascii="${WORD_FONT}" w:hAnsi="${WORD_FONT}" w:cs="${WORD_FONT}"/>`,
-    opts.bold ? '<w:b/>' : '',
-    opts.italic ? '<w:i/>' : '',
-    opts.sizeHp ? `<w:sz w:val="${opts.sizeHp}"/><w:szCs w:val="${opts.sizeHp}"/>` : '',
-  ].join('');
+  const parts = stripDirectionalMarks(text).split('\n');
+  const rPr = (rtl: boolean) =>
+    [
+      `<w:rFonts w:ascii="${WORD_FONT}" w:hAnsi="${WORD_FONT}" w:cs="${WORD_FONT}"/>`,
+      opts.bold ? '<w:b/><w:bCs/>' : '',
+      opts.italic ? '<w:i/><w:iCs/>' : '',
+      opts.sizeHp ? `<w:sz w:val="${opts.sizeHp}"/><w:szCs w:val="${opts.sizeHp}"/>` : '',
+      rtl ? '<w:rtl/>' : '',
+    ].join('');
   return parts
     .map((part, i) => {
-      const br = i > 0 ? '<w:br/>' : '';
-      if (!part) return br ? `<w:r>${br}</w:r>` : '';
-      const space = /^\s|\s$/.test(part) ? ' xml:space="preserve"' : '';
-      return `<w:r><w:rPr>${rPr}</w:rPr>${br}<w:t${space}>${escapeXml(part)}</w:t></w:r>`;
+      const br = i > 0 ? `<w:r>${'<w:br/>'}</w:r>` : '';
+      if (!part) return br;
+      return (
+        br +
+        splitByScript(part)
+          .map(([seg, rtl]) => {
+            const space = /^\s|\s$/.test(seg) ? ' xml:space="preserve"' : '';
+            return `<w:r><w:rPr>${rPr(rtl)}</w:rPr><w:t${space}>${escapeXml(seg)}</w:t></w:r>`;
+          })
+          .join('')
+      );
     })
     .join('');
+}
+
+/**
+ * Paragraph properties for a Hebrew book paragraph. RTL paragraphs never
+ * get jc="right" (logical: that is the line END = visual LEFT in Word);
+ * no jc starts at the visual right. Titles centre; body text justifies.
+ */
+function paragraphPPr(style: string, text: string, align: 'center' | 'start' | 'justify'): string {
+  const rtl = paraIsRtl(text);
+  const jc =
+    align === 'center' ? '<w:jc w:val="center"/>' : align === 'justify' ? '<w:jc w:val="both"/>' : rtl ? '' : '<w:jc w:val="left"/>';
+  return `<w:pStyle w:val="${style}"/>${rtl ? '<w:bidi w:val="1"/>' : ''}${jc}`;
 }
 
 function paragraphXml(
@@ -117,7 +146,12 @@ function paragraphXml(
   const style = roleParagraphStyle(unit.role);
   const sizeHp = roleFontSizeHalfPoints(unit.role);
   const bold = roleIsBold(unit.role);
-  const align = unit.role === 'main_title' || unit.role === 'subtitle' ? 'center' : 'right';
+  const align: 'center' | 'start' | 'justify' =
+    unit.role === 'main_title' || unit.role === 'subtitle'
+      ? 'center'
+      : unit.role === 'chapter' || unit.role === 'heading' || unit.role === 'subheading'
+        ? 'start'
+        : 'justify';
 
   const refsXml = footnoteRefs
     .map(
@@ -148,7 +182,7 @@ function paragraphXml(
     runsXml = runXml(unitPlainText(unit), { bold, sizeHp });
   }
 
-  return `<w:p><w:pPr><w:pStyle w:val="${style}"/><w:bidi w:val="1"/><w:jc w:val="${align}"/><w:rPr><w:rFonts w:ascii="${WORD_FONT}" w:hAnsi="${WORD_FONT}" w:cs="${WORD_FONT}"/><w:sz w:val="${sizeHp}"/><w:szCs w:val="${sizeHp}"/></w:rPr></w:pPr>${runsXml}${refsXml}</w:p>`;
+  return `<w:p><w:pPr>${paragraphPPr(style, unitPlainText(unit), align)}<w:rPr><w:rFonts w:ascii="${WORD_FONT}" w:hAnsi="${WORD_FONT}" w:cs="${WORD_FONT}"/><w:sz w:val="${sizeHp}"/><w:szCs w:val="${sizeHp}"/></w:rPr></w:pPr>${runsXml}${refsXml}</w:p>`;
 }
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -180,15 +214,15 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:docDefaults>
     <w:rPrDefault><w:rPr><w:rFonts w:ascii="${WORD_FONT}" w:hAnsi="${WORD_FONT}" w:cs="${WORD_FONT}"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="he-IL" w:bidi="he-IL"/></w:rPr></w:rPrDefault>
-    <w:pPrDefault><w:pPr><w:bidi w:val="1"/><w:jc w:val="right"/><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault>
+    <w:pPrDefault><w:pPr><w:bidi w:val="1"/><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault>
   </w:docDefaults>
-  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:jc w:val="right"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/></w:pPr></w:style>
   <w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:jc w:val="center"/><w:spacing w:before="480" w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="44"/><w:szCs w:val="44"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:jc w:val="right"/><w:spacing w:before="360" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:jc w:val="right"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:jc w:val="right"/><w:spacing w:before="240" w:after="60"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:spacing w:before="360" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:bidi w:val="1"/><w:spacing w:before="240" w:after="60"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style>
   <w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="Footnote Reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="Footnote Text"/><w:basedOn w:val="Normal"/><w:pPr><w:bidi w:val="1"/><w:jc w:val="right"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="Footnote Text"/><w:basedOn w:val="Normal"/><w:pPr><w:bidi w:val="1"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>
 </w:styles>
 `;
 
@@ -276,7 +310,7 @@ ${paragraphs.join('\n')}
     const id = footnoteIdByUnit.get(fn.id)!;
     const num = fn.footnoteNumber ?? id - 1;
     const text = unitPlainText(fn);
-    return `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/><w:bidi w:val="1"/><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteRef w:id="${id}"/></w:r>${runXml(`${num}. ${text}`, { sizeHp: 20 })}</w:p></w:footnote>`;
+    return `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/><w:bidi w:val="1"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteRef w:id="${id}"/></w:r>${runXml(`${num}. ${text}`, { sizeHp: 20 })}</w:p></w:footnote>`;
   });
 
   const footnotesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
