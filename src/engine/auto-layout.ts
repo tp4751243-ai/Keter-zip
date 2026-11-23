@@ -70,7 +70,7 @@ import {
   type DocumentClassification as HistoricalDocumentClassification,
   type RecipeSuggestion as HistoricalRecipeSuggestion,
 } from './historical-layouts';
-import { seferTypeForRecipe } from './sefer-type';
+import { seferTypeForRecipe, type SeferType } from './sefer-type';
 import { applyGenreTypography, applyRecipeToSettings as applyRecipeToSettingsEngine } from './layout-recipes';
 import type { LayoutRecipe } from './layout-recipes';
 import { applyVilnaShasDefaults, classifyShasParagraph, normalizeHebrewForMatch } from './vilna-shas';
@@ -108,7 +108,21 @@ export interface DocumentClassification {
   /** Distinct commentary author count, capped for scoring (same as commentaryCount). */
   distinctCommentaryAuthors: number;
   /** Genre-marker hit counts (raw text signals, for the scorer). */
-  markers: { responsa: number; chassidic: number; shulchanAruch: number; mishnahBerurah: number; taamimUnits: number };
+  markers: {
+    responsa: number;
+    chassidic: number;
+    shulchanAruch: number;
+    mishnahBerurah: number;
+    taamimUnits: number;
+    /** Layout training T6 — Chumash evidence: Torah book / parsha names in the title, headings or file name. */
+    torahBook?: number;
+    /** Layout training T6 — source units ending a pasuk (sof pasuk ׃, or ':' after vocalized text). */
+    sofPasukUnits?: number;
+    /** Layout training T6 — source units that are mostly vocalized (nikkud on most letters). */
+    vocalizedSourceUnits?: number;
+    /** Layout training T6 — Gemara evidence: מתני׳ / גמ׳ / תנו רבנן / אמר רב … in the source. */
+    talmudUnits?: number;
+  };
   // --- v0.9.3 Part B: genre signals + role patterns (research note) ---
   /** Genre signals matched in the title / first pages / file name / styles (strong or weak). */
   signals?: GenreSignal[];
@@ -349,6 +363,39 @@ const RESPONSA_MARKERS = [/^שאלה:/, /^תשובה:/, /שאלה ותשובה/,
 const SHULCHAN_ARUCH_MARKERS = [/שולחן ערוך/, /אורח חיים/, /יורה דעה/, /אבן העזר/, /חושן משפט/];
 const MISHNAH_BERURAH_MARKERS = [/משנה ברורה/, /ביאור הלכה/, /שער הציון/];
 
+/**
+ * Layout training T6 — Gemara-only evidence in the source text. Rashi
+ * alone is NOT evidence of a Gemara: a Chumash, a Mishnah or a Rif
+ * carries Rashi too.
+ */
+const TALMUD_SOURCE_MARKERS: RegExp[] = [
+  /(?:^|\s)(?:מתני[׳']|מתניתין|גמ[׳']|גמרא)[:.]?(?=\s|$)/,
+  /(?:^|\s)(?:תנו\s+רבנן|ת["״]ר|תניא|איתמר|תא\s+שמע|ת["״]ש|מאי\s+טעמא|מ["״]ט|אמר\s+מר|איבעיא\s+להו|מיתיבי|תיובתא|הדרן\s+עלך)(?=\s|$|[:.,])/,
+];
+
+const TORAH_BOOKS = ['בראשית', 'שמות', 'ויקרא', 'במדבר', 'דברים'];
+const PARSHIYOT = [
+  // Short names are ordinary words in any heading — only with "פרשת".
+  'פרשת נח', 'פרשת בא', 'פרשת צו', 'פרשת ראה', 'פרשת שלח',
+  'לך לך', 'וירא', 'חיי שרה', 'תולדות', 'ויצא', 'וישלח', 'וישב', 'מקץ', 'ויגש', 'ויחי',
+  'וארא', 'בשלח', 'יתרו', 'משפטים', 'תרומה', 'תצוה', 'כי תשא', 'ויקהל', 'פקודי',
+  'שמיני', 'תזריע', 'מצורע', 'אחרי מות', 'קדושים', 'אמור', 'בהר', 'בחוקותי', 'בחקתי',
+  'נשא', 'בהעלותך', 'קרח', 'חקת', 'בלק', 'פינחס', 'פנחס', 'מטות', 'מסעי',
+  'ואתחנן', 'עקב', 'שופטים', 'כי תצא', 'כי תבוא', 'נצבים', 'וילך', 'האזינו', 'וזאת הברכה',
+  'chumash', 'chumish', 'bereishit', 'bereshit', 'shemot', 'vayikra', 'bamidbar', 'devarim', 'parashat', 'parshat', 'mikraot', 'torah',
+];
+
+/** Torah book / parsha names in a title, file name or headings (strong Chumash signal). */
+function countTorahBookNames(text: string): number {
+  const t = text.replace(/[\u0591-\u05C7]/g, '').replace(/[_\-.]+/g, ' ').toLowerCase();
+  let n = 0;
+  for (const name of [...TORAH_BOOKS, ...PARSHIYOT]) {
+    const re = new RegExp(`(?:^|[^\\u05D0-\\u05EAa-z])${name}(?=$|[^\\u05D0-\\u05EAa-z])`);
+    if (re.test(t)) n++;
+  }
+  return n;
+}
+
 export function classifyDocument(
   units: ContentUnit[],
   links: RavTextLink[] = [],
@@ -369,6 +416,9 @@ export function classifyDocument(
   let verseUnits = 0;
   let simanUnits = 0;
   let taamimUnits = 0;
+  let sofPasukUnits = 0;
+  let vocalizedSourceUnits = 0;
+  let talmudUnits = 0;
 
   for (const u of units) {
     const text = u.rawText || '';
@@ -380,6 +430,13 @@ export function classifyDocument(
     if (u.role === 'verse') verseUnits += 1;
     if (u.role === 'siman' || u.role === 'seif') simanUnits += 1;
     if (/[\u0591-\u05AF]/.test(text)) taamimUnits += 1;
+    if (u.role === 'main_source' || u.role === 'verse') {
+      const letters = (text.match(/[\u05D0-\u05EA]/g) ?? []).length;
+      const vowels = (text.match(/[\u05B0-\u05BC\u05C1\u05C2\u05C7]/g) ?? []).length;
+      if (letters >= 8 && vowels / letters > 0.5) vocalizedSourceUnits += 1;
+      if (/\u05C3/.test(text) || (vowels / Math.max(1, letters) > 0.5 && /[\u05B0-\u05BC]\s*:/.test(text))) sofPasukUnits += 1;
+      if (TALMUD_SOURCE_MARKERS.some(re => re.test(text))) talmudUnits += 1;
+    }
     const tier = classifyUnitTier(u);
     if (tier) {
       tierCounts[tier.tier] += 1;
@@ -438,12 +495,23 @@ export function classifyDocument(
   // it may decide is the scorer's job (weak hints need a second
   // signal, publisher hints need a Gemara role pattern).
   const titleText = [opts?.fileName ?? '', titlePage.title ?? '', titlePage.subtitle ?? '', titlePage.author ?? ''].join(' ');
+  // Layout training T6 — genre words are read from the book's OWN text
+  // (main text and headings), never from its commentaries: Rashi on the
+  // Chumash says "דבר אחר" (read as Midrash) and Rashi on Berakhot cites
+  // the "ירושלמי" (read as a Talmud Yerushalmi).
   const bodyText = units
-    .filter(u => u.role !== 'footnote')
+    .filter(u => u.role === 'main_source' || u.role === 'verse' || u.role === 'chapter' || u.role === 'heading' || u.role === 'main_title' || u.role === 'subtitle' || u.role === 'regular_paragraph')
     .slice(0, 20)
     .map(u => u.rawText || '')
     .join(' ');
   const styleText = units.map(u => u.styleName || '').join(' ');
+  // Layout training T6 — Torah book / parsha names in the title, file
+  // name or chapter headings: a Chumash, never a Gemara.
+  const headingText = units
+    .filter(u => u.role === 'chapter' || u.role === 'heading' || u.role === 'main_title' || u.role === 'subtitle')
+    .map(u => u.rawText || '')
+    .join(' ');
+  const torahBook = countTorahBookNames(`${titleText} ${headingText}`);
   const signals: GenreSignal[] = [];
   for (const [text, source] of [[titleText, 'title'], [bodyText, 'text'], [styleText, 'style']] as const) {
     for (const sig of matchGenreSignals(text, source)) {
@@ -485,7 +553,7 @@ export function classifyDocument(
     commentaryAuthors: authors,
     titlePage: titlePage.isTitlePage ? titlePage : undefined,
     distinctCommentaryAuthors: authors.length,
-    markers: { responsa: responsaHits, chassidic: chassidicHits, shulchanAruch: shulchanAruchHits, mishnahBerurah: mishnahBerurahHits, taamimUnits },
+    markers: { responsa: responsaHits, chassidic: chassidicHits, shulchanAruch: shulchanAruchHits, mishnahBerurah: mishnahBerurahHits, taamimUnits, torahBook, sofPasukUnits, vocalizedSourceUnits, talmudUnits },
     signals,
     rolePatterns,
   };
@@ -723,10 +791,20 @@ function scoreRecipes(c: DocumentClassification): ScoredRecipe[] {
     let s = 0;
     const r: string[] = [];
     const rh: string[] = [];
-    if (t.rashi_inner > 0) { s += 3; r.push('Rashi detected (inner commentary)'); rh.push('זוהה רש״י'); }
+    // Layout training T6 — Rashi + a main text with dibburim is just as
+    // true of a Chumash; only Gemara evidence (Tosafot, מתני׳/גמ׳, Talmud
+    // phrasing) earns the full Vilna score.
+    const talmudEvidence = t.tosafot_outer > 0 || (c.markers.talmudUnits ?? 0) > 0 || t.mishna > 0;
+    if (t.rashi_inner > 0) {
+      s += talmudEvidence ? 3 : 1;
+      r.push('Rashi detected (inner commentary)');
+      rh.push('זוהה רש״י');
+    }
     if (t.tosafot_outer > 0) { s += 3; r.push('Tosafot detected (outer commentary)'); rh.push('זוהו תוספות'); }
+    if ((c.markers.talmudUnits ?? 0) > 0) { s += 2; r.push('Gemara phrasing (מתני׳ / גמ׳ / תנו רבנן …)'); rh.push('זוהה לשון גמרא'); }
+    if ((c.markers.torahBook ?? 0) > 0 || (c.markers.sofPasukUnits ?? 0) >= 2) s = Math.max(0, s - 4);
     if (t.mishna > 0) { s += 2; r.push('Mishna block detected'); rh.push('זוהתה משנה'); }
-    if (t.gemara > 0 && c.hasDibbur) { s += 2; r.push('Gemara with linked dibbur hamatchil'); rh.push('זוהתה גמרא עם דיבור המתחיל'); }
+    if (t.gemara > 0 && c.hasDibbur && talmudEvidence) { s += 2; r.push('Gemara with linked dibbur hamatchil'); rh.push('זוהתה גמרא עם דיבור המתחיל'); }
     else if (t.gemara > 0) { s += 1; r.push('central source text detected'); rh.push('זוהה טקסט מקור מרכזי'); }
     const tert = t.ein_mishpat_ner_mitzvah + t.masoret_ha_shas + t.torah_or;
     if (tert > 0) { s += 1; r.push(`${tert} secondary marginalia unit(s) (Ein Mishpat / Masoret HaShas / Torah Or)`); rh.push(`זוהו ${tert} יחידות הערות שוליות (עין משפט / מסורת הש״ס / תורה אור)`); }
@@ -746,6 +824,14 @@ function scoreRecipes(c: DocumentClassification): ScoredRecipe[] {
     const rh: string[] = [];
     if ((c.roles.verse ?? 0) > 0 || c.markers.taamimUnits >= 2) { s += 3; r.push('verse (pasuk) units detected'); rh.push('זוהו פסוקים'); }
     if (c.commentaryAuthors.includes('Onkelos')) { s += 2; r.push('Targum Onkelos detected'); rh.push('זוהה תרגום אונקלוס'); }
+    // Layout training T6 — Chumash evidence beyond taamim.
+    if ((c.markers.torahBook ?? 0) > 0) { s += 5; r.push('Torah book / parsha name detected'); rh.push('זוהה שם ספר / פרשה בתורה'); }
+    if ((c.markers.sofPasukUnits ?? 0) >= 2) { s += 3; r.push('pesukim (sof pasuk) detected'); rh.push('זוהו פסוקים (סוף פסוק)'); }
+    if ((c.markers.vocalizedSourceUnits ?? 0) >= 2 && t.rashi_inner > 0 && (c.markers.talmudUnits ?? 0) === 0) {
+      s += 2;
+      r.push('vocalized main text with Rashi');
+      rh.push('טקסט מנוקד עם רש״י');
+    }
     const extra = Math.max(0, c.commentaryCount - 2);
     if (extra > 0) { s += Math.min(4, extra); r.push(`${c.commentaryCount} distinct commentators`); rh.push(`זוהו ${c.commentaryCount} מפרשים שונים`); }
     push(getRecipeByIdLocal('mikraot-gedolot')!, s, r, rh);
@@ -851,7 +937,13 @@ export function decideAutoLayout(c: DocumentClassification): AutoLayoutDecision 
   // VeHadar page, not a generic Vilna folio). When no signal is
   // eligible the score path below runs exactly as v0.9.0.
   const bySignals = suggestRecipeBySignals(toHistoricalClassification(c));
-  if (bySignals) return decisionFromSignal(bySignals);
+  // Layout training T6 — clear Chumash structure (Torah book / parsha
+  // names, pesukim with sof pasuk, teamim) outranks a genre word.
+  const chumashStructure =
+    (c.markers.torahBook ?? 0) > 0 || (c.markers.sofPasukUnits ?? 0) >= 2 || c.markers.taamimUnits >= 2;
+  if (bySignals && !(chumashStructure && seferTypeForRecipe(bySignals.recipeId) !== 'chumash')) {
+    return decisionFromSignal(bySignals);
+  }
   const scored = scoreRecipes(c);
   const best = scored[0];
   if (best && best.score >= AUTO_LAYOUT_CONFIDENT_SCORE) {
@@ -920,6 +1012,49 @@ export function classifyForImport(
     };
   }
   return { classification, decision };
+}
+
+/** The default ready design for each sefer type (when nothing better scored). */
+const DEFAULT_RECIPE_FOR_TYPE: Record<SeferType, string> = {
+  talmud: 'talmud-bavli',
+  chumash: 'mikraot-gedolot',
+  mishnah: 'mishnah-classic',
+  halacha: 'shulchan-aruch',
+  siddur: 'siddur',
+  yiddish: 'yiddish-sefer',
+  prose: 'single-column',
+};
+
+/**
+ * Layout training T6 — keep an import inside the book's own type. When
+ * the user has made the book a Chumash (or any non-Talmud type), an
+ * imported Word file may refine the design WITHIN that type but never
+ * turn the book into a Gemara (the reported bug: Chumash + Rashi was
+ * "Laid out as Vilna Shas — Rashi detected"). A Talmud book (the app's
+ * default) still lets the content decide.
+ */
+export function constrainDecisionToSeferType(
+  decision: AutoLayoutDecision,
+  classification: DocumentClassification,
+  bookType: SeferType | undefined
+): AutoLayoutDecision {
+  if (!bookType || bookType === 'talmud') return decision;
+  if (seferTypeForRecipe(decision.recipeId, decision.layoutType) === bookType) return decision;
+  const inType = scoreRecipes(classification).find(sr => seferTypeForRecipe(sr.recipe.id, sr.recipe.layoutType) === bookType);
+  const recipeId = inType?.recipe.id ?? DEFAULT_RECIPE_FOR_TYPE[bookType];
+  const recipe = getRecipeByIdLocal(recipeId);
+  const nameHe = recipe?.nameHe ?? recipeId;
+  const nameEn = recipe?.nameEn ?? recipeId;
+  return {
+    recipeId,
+    layoutType: recipe?.layoutType ?? decision.layoutType,
+    confidence: Math.max(decision.confidence, 0.7),
+    reasons: [`kept the book's type (${bookType}); the file looked like ${decision.recipeId}`],
+    reasonsHe: [`נשמר סוג הספר שנבחר`],
+    isFallback: false,
+    lineHe: `עומד כ${nameHe} — נשמר סוג הספר שבחרתם (הקובץ נראה כמו ${decision.recipeId}). ניתן לשנות בכל עת.`,
+    lineEn: `Laid out as ${nameEn} — kept the book type you chose (the file looked like ${decision.recipeId}). You can change it at any time.`,
+  };
 }
 
 /**

@@ -41,6 +41,8 @@ jobs:
         run: npx tsx scripts/training/book-rules-test.ts
       - name: Word export RTL rules
         run: npx tsx scripts/training/word-rtl-test.ts
+      - name: Word import picks the right sefer type (Chumash is never a Gemara)
+        run: npx tsx scripts/training/import-classifier-test.ts
 
   build-windows:
     needs: layout-rules

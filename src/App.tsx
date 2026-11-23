@@ -111,6 +111,7 @@ import {
 // v0.9.0 Part C — automatic layout on import + historical recipes.
 import {
   applyRecipeToSettingsById,
+  constrainDecisionToSeferType,
   getRecipeByIdLocal,
   type AutoLayoutImportInfo,
 } from './engine/auto-layout';
@@ -147,7 +148,7 @@ import {
 import { PaginationEngine } from './engine/pagination-engine';
 import { DocxImporter } from './engine/docx-importer';
 import { buildBackOfTitlePage, buildTitlePageResult } from './engine/toc-engine';
-import { seferTypeForRecipe } from './engine/sefer-type';
+import { seferTypeForLayout, seferTypeForRecipe, type SeferType } from './engine/sefer-type';
 import { PdfExporter } from './engine/pdf-exporter';
 import { IdmlExporter } from './engine/idml-exporter';
 import { QaEngine } from './engine/qa-engine';
@@ -1472,7 +1473,7 @@ export default function App() {
    */
   const handleImportUnits = useCallback(
     (units: ContentUnit[], title: string, links?: RavTextLink[], autoLayout?: AutoLayoutImportInfo, setup?: ChosenSetup) => {
-      const decision = autoLayout?.decision;
+      const rawDecision = autoLayout?.decision;
       // v0.9.9 — ONE explicit chosen setup, passed in by the caller
       // (Home / New Project). Only when no setup is passed does the
       // one-time migration run, honouring a choice stored before this
@@ -1487,6 +1488,24 @@ export default function App() {
       const pendingExplicitLayout = chosen && !chosen.recipeId && !chosen.archetypeId && !chosen.customLayout
         ? chosen.baseLayout
         : null;
+
+      // Layout training T6 — the import stays inside the book's type: the
+      // type the user chose for the new book, or the open book's own type
+      // when importing into it. A Chumash + Rashi file in a Mikraot
+      // Gedolot book is never re-laid out as a Vilna Shas.
+      const bookType: SeferType | undefined = pendingArchetype
+        ? seferTypeForRecipe(getArchetypeById(pendingArchetype)?.recipeId ?? '', getArchetypeById(pendingArchetype)?.baseLayout ?? 'single_column')
+        : pendingRecipeId
+          ? seferTypeForRecipe(pendingRecipeId)
+          : pendingExplicitLayout
+            ? seferTypeForLayout(pendingExplicitLayout)
+            : chosen
+              ? undefined
+              : designSettings?.pageLayout?.seferType;
+      const decision =
+        rawDecision && autoLayout
+          ? constrainDecisionToSeferType(rawDecision, autoLayout.classification, bookType)
+          : rawDecision;
 
       const archetypeObj = pendingArchetype ? getArchetypeById(pendingArchetype) : undefined;
       const pendingRecipeObj = pendingRecipeId ? getRecipeById(pendingRecipeId) : undefined;
@@ -1587,6 +1606,7 @@ export default function App() {
       showToast(t("קובץ DOCX יובא בהצלחה ועומד לספר!"), 'success');
     },
     [
+      designSettings,
       geometry,
       handleUpdateDesignSettings,
       layoutType,
