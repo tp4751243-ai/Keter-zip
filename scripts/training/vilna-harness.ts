@@ -64,6 +64,7 @@ import { applyRecipeToSettingsById } from '../../src/engine/auto-layout';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { PdfExporter, type PdfPageRenderPlan } from '../../src/engine/pdf-exporter';
 import { computeTalmudDafAmud } from '../../src/engine/vilna-shas';
+import { textBlockLeft, textBlockRight } from '../../src/types/typesetter';
 
 // ── Corpus ────────────────────────────────────────────────────────────
 interface Corpus {
@@ -360,8 +361,8 @@ function scorePage(
 
   // M1 — marginal apparatus in side columns, on the correct side:
   // Ein Mishpat (em-*) outer; Torah Or (to-*) and Gilyon (gl-*) inner.
-  const tb0 = g.marginInside;
-  const tb1 = g.pageWidth - g.marginOutside;
+  const tb0 = textBlockLeft(g);
+  const tb1 = textBlockRight(g);
   const tbW = tb1 - tb0;
   const margLines = plan.lines.filter(l => /^(em|to|gl)-/.test(l.unitId));
   if (margLines.length === 0) {
@@ -426,6 +427,20 @@ function scorePage(
     detail: gaps.length ? `median ${median(gaps).toFixed(2)} em, p95 ${p95.toFixed(2)} em over ${gaps.length} lines` : 'no justified Gemara lines',
     value: p95,
   });
+
+  // B1 — right-bound book: the wider (inside) margin faces the spine.
+  // Amud a / recto is the left-hand page, bound on its right edge.
+  {
+    const leftMargin = textBlockLeft(g);
+    const rightMargin = g.pageWidth - textBlockRight(g);
+    const want = innerIsRight ? g.marginInside : g.marginOutside;
+    out.push({
+      id: 'B1',
+      label: 'Inside margin on the binding side (right-bound book)',
+      status: Math.abs(rightMargin - want) < 0.5 || g.marginInside === g.marginOutside ? 'pass' : 'fail',
+      detail: `left ${leftMargin.toFixed(1)}pt, right ${rightMargin.toFixed(1)}pt (inside ${g.marginInside.toFixed(1)}pt should be on the ${innerIsRight ? 'right' : 'left'})`,
+    });
+  }
 
   // P1 — page filled to the bottom margin (not on the final page).
   const bottom = Math.max(...plan.lines.map(l => l.yBottom), 0);

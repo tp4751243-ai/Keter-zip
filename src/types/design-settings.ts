@@ -514,6 +514,12 @@ export interface PageElementsDesignSettings {
 }
 
 export interface FolioNumberingSettings {
+  /**
+   * Layout training T3.3 — geresh / gershayim on Hebrew page numbers.
+   * Default false: printed folios carry none (Academy of the Hebrew
+   * Language rule; hebrew-book-typesetter skill) — טו, קיח, not ט״ו.
+   */
+  gershayim?: boolean;
   /** 'dots' -> ב. / ב: , 'amud_hebrew' -> ב ע״א / ב ע״ב , 'gematria' -> ב׳ , 'numbers' -> 2 */
   dafFormat: DafFormatMode;
   /** Starting traditional Daf number (default 2 for Talmud -> Daf ב) */

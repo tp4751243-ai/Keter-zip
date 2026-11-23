@@ -12,6 +12,8 @@ import {
   HeaderFolioPosition,
   OpeningWordBoxGeom,
   VilnaHeaderGeom,
+  textBlockLeft,
+  textBlockRight,
   PageGeometry,
   PageTypesetResult,
   PlacedOrnament,
@@ -1015,8 +1017,8 @@ export class PdfExporter {
       cover.title,
       geometry.pageHeight
     );
-    const mLeft = frontXOffset + geometry.marginInside;
-    const mRight = frontXOffset + geometry.pageWidth - geometry.marginOutside;
+    const mLeft = frontXOffset + textBlockLeft(geometry);
+    const mRight = frontXOffset + textBlockRight(geometry);
     for (const row of rows) {
       if (!row.text.trim()) continue;
       this.drawAlignedPhrase(
@@ -1137,8 +1139,8 @@ export class PdfExporter {
     const mediaW = geometry.pageWidth + 2 * bleed;
     const mediaH = geometry.pageHeight + 2 * bleed;
     const g = (hex: string) => (blackOnly ? this.toGrayHex(hex) : hex);
-    const mLeft = geometry.marginInside + bleed;
-    const mRight = geometry.pageWidth + bleed - geometry.marginOutside;
+    const mLeft = textBlockLeft(geometry) + bleed;
+    const mRight = textBlockRight(geometry) + bleed;
     const mTop = geometry.marginTop + bleed;
 
     doc.setFillColor(...(blackOnly ? ([255, 255, 255] as [number, number, number]) : ([252, 250, 245] as [number, number, number])));
@@ -1211,8 +1213,8 @@ export class PdfExporter {
 
     const mTop = geometry.marginTop;
     const mBottom = geometry.pageHeight - geometry.marginBottom;
-    const mLeft = geometry.marginInside;
-    const mRight = geometry.pageWidth - geometry.marginOutside;
+    const mLeft = textBlockLeft(geometry);
+    const mRight = textBlockRight(geometry);
     const contentW = mRight - mLeft;
 
     const sourceFont =
@@ -1663,7 +1665,8 @@ export class PdfExporter {
     // carries its fields + border in the plan (its `lines` stay empty).
     // This is the handoff the Chromium endpoint consumes too — it renders
     // the title page from `titlePage`, not from lines.
-    const isTitlePage = !!page.isTitlePage;
+    // The back of the title page is a plain verso, not a second cover.
+    const isTitlePage = !!page.isTitlePage && !page.isBackOfTitle;
     const tp = designSettings?.titlePage;
     // v0.9.9 — template carry-through: the plan carries the template
     // id / metadata / ornaments / background / metadata rows (laid out
@@ -1805,9 +1808,9 @@ export class PdfExporter {
       headerTitle: headerTitle || 'ספר קודש',
       continuationHeader: vh ? undefined : continuationHeader,
       continuationFooter: vh ? undefined : continuationFooter,
-      showRunningHeader: vh ? false : showRunningHeader,
-      showRunningFooter,
-      showFolioNumber: vh ? false : showFolioNumber,
+      showRunningHeader: vh || page.isBackOfTitle ? false : showRunningHeader,
+      showRunningFooter: page.isBackOfTitle ? false : showRunningFooter,
+      showFolioNumber: vh || page.isBackOfTitle ? false : showFolioNumber,
       vilnaHeader: vh,
       pageNumberStyle,
       showDafPrefix,
@@ -1817,10 +1820,10 @@ export class PdfExporter {
       headerLeftText: resolvedHeader.left.visible ? resolvedHeader.left.text : '',
       headerCenterText: resolvedHeader.center.visible ? resolvedHeader.center.text : '',
       headerRightText: resolvedHeader.right.visible ? resolvedHeader.right.text : '',
-      headerShowLeft: !vh && showRunningHeader && resolvedHeader.left.visible,
-      headerShowCenter: !vh && showRunningHeader && resolvedHeader.center.visible,
-      headerShowRight: !vh && showRunningHeader && resolvedHeader.right.visible,
-      headerShowPageNumber: !vh && showRunningHeader && resolvedHeader.right.visible,
+      headerShowLeft: !vh && !page.isBackOfTitle && showRunningHeader && resolvedHeader.left.visible,
+      headerShowCenter: !vh && !page.isBackOfTitle && showRunningHeader && resolvedHeader.center.visible,
+      headerShowRight: !vh && !page.isBackOfTitle && showRunningHeader && resolvedHeader.right.visible,
+      headerShowPageNumber: !vh && !page.isBackOfTitle && showRunningHeader && resolvedHeader.right.visible,
       headerAlignment: resolvedHeader.alignment,
       headerFontFamily: resolvedHeader.fontFamily,
       headerFontSizePt: resolvedHeader.fontSizePt,
@@ -2236,8 +2239,8 @@ export class PdfExporter {
 
     const mTop = geometry.marginTop;
     const mBottom = geometry.pageHeight - geometry.marginBottom;
-    const mLeft = geometry.marginInside;
-    const mRight = geometry.pageWidth - geometry.marginOutside;
+    const mLeft = textBlockLeft(geometry);
+    const mRight = textBlockRight(geometry);
     const contentW = mRight - mLeft;
     const contentH = mBottom - mTop;
 
@@ -2766,7 +2769,7 @@ export class PdfExporter {
     // v0.5.0 (Title Page / Shaar Blat builder): a title page is drawn by
     // the dedicated cover renderer (fields + border from the project
     // settings), not as a body page — no header, no folio, no body lines.
-    if (page.isTitlePage) {
+    if (page.isTitlePage && !page.isBackOfTitle) {
       const tp = page.designSettings?.titlePage;
       const cover: CoverPageData = tp?.enabled
         ? titlePageSettingsToCoverData(tp, headerTitle || 'ספר קודש', geometry.pageHeight)
@@ -2777,8 +2780,8 @@ export class PdfExporter {
 
     const mTop = geometry.marginTop + bleedPt;
     const mBottom = pageH + bleedPt - geometry.marginBottom;
-    const mLeft = geometry.marginInside + bleedPt;
-    const mRight = pageW + bleedPt - geometry.marginOutside;
+    const mLeft = textBlockLeft(geometry) + bleedPt;
+    const mRight = textBlockRight(geometry) + bleedPt;
     const contentW = mRight - mLeft;
     const contentH = mBottom - mTop;
 
@@ -3315,8 +3318,8 @@ export class PdfExporter {
     // placed in the invisible layer from the plan's title-page rows —
     // otherwise the title would not be searchable in the fallback PDF.
     if (plan.isTitlePage && plan.titlePage) {
-      const mLeft = page.geometry.marginInside;
-      const mRight = page.geometry.pageWidth - page.geometry.marginOutside;
+      const mLeft = textBlockLeft(page.geometry);
+      const mRight = textBlockRight(page.geometry);
       for (const row of plan.titlePage.rows) {
         const family = PdfNativeTextEngine.resolveEmbeddedFontFamily(row.fontFamily || 'Frank Ruhl Libre');
         doc.setFont(family, row.isBold ? 'bold' : 'normal');

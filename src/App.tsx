@@ -146,7 +146,7 @@ import {
 } from './types/typesetter';
 import { PaginationEngine } from './engine/pagination-engine';
 import { DocxImporter } from './engine/docx-importer';
-import { buildTitlePageResult } from './engine/toc-engine';
+import { buildBackOfTitlePage, buildTitlePageResult } from './engine/toc-engine';
 import { PdfExporter } from './engine/pdf-exporter';
 import { IdmlExporter } from './engine/idml-exporter';
 import { QaEngine } from './engine/qa-engine';
@@ -1079,13 +1079,17 @@ export default function App() {
     // at 1, so the shift unifies every layout.
     if (designSettings?.titlePage?.enabled !== true) return body;
     const titlePage = buildTitlePageResult(geometry, layoutType, designSettings, documentTitle);
+    // Layout training T3.4 — title (recto), its back (verso), then the body
+    // opens on a recto, matching the mirrored margins of every body page.
+    const backOfTitle = buildBackOfTitlePage(geometry, layoutType, designSettings, documentTitle);
     const pages: PageTypesetResult[] = [
       titlePage,
+      backOfTitle,
       ...body.pages.map((p, i) => ({
         ...p,
-        pageIndex: p.pageIndex + 1,
-        pageNumber: i + 2,
-        pageNumberHebrew: PdfExporter.toHebrewGematria(i + 2),
+        pageIndex: p.pageIndex + 2,
+        pageNumber: i + 3,
+        pageNumberHebrew: PdfExporter.toHebrewGematria(i + 3),
       })),
     ];
     return { ...body, pages, totalPages: pages.length };

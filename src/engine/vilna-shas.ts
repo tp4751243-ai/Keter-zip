@@ -190,7 +190,9 @@ export function formatBodyFolioLabel(
     }
   }
   const num = bodyPageIndex + 1;
-  const he = gematriaWithPunct(num);
+  // Layout training T3.3 — printed folios carry no geresh / gershayim
+  // unless the book asks for them (טו / טז for 15 / 16 either way).
+  const he = fn?.gershayim ? gematriaWithPunct(num) : gematriaBare(num);
   const display = pageNumberStyle === 'numbers' ? String(num) : he;
   return {
     folioDisplay: display,

@@ -709,7 +709,15 @@ export class PaginationEngine {
       if (!pg.isTitlePage && !pg.isImageOnlyPage) {
         const bIdx = bodyPageCounter++;
         pg.bodyPageIndex = bIdx;
-        pg.geometry = { ...pg.geometry, isVerso: bIdx % 2 === 1 };
+        // Layout training T3.1 — mirrored margins for a right-bound book:
+        // recto (even body index, left-hand page) has the outside margin
+        // on its left; verso has the inside margin on its left.
+        const mirrorOn = designSettings?.pageLayout?.mirrorMargins !== false;
+        pg.geometry = {
+          ...pg.geometry,
+          isVerso: bIdx % 2 === 1,
+          textLeftPt: mirrorOn && bIdx % 2 === 0 ? pg.geometry.marginOutside : pg.geometry.marginInside,
+        };
         const folioInfo = formatBodyFolioLabel(bIdx, layoutType, designSettings?.pageElements);
         pg.folioDisplay = folioInfo.folioDisplay;
         pg.pageNumberHebrew = folioInfo.folioDisplay;

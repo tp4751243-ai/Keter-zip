@@ -125,6 +125,46 @@ function makeIssue(
 
 /** Double spaces, space before punctuation, missing space after punctuation,
  *  straight quotes next to Hebrew letters. */
+const HEB_BASE = /[\u05D0-\u05EA]/;
+const HEB_MARK = /[\u0591-\u05C7]/;
+
+/** Count Hebrew letters (with their nikkud / teamim marks) running from `i` in `dir`. */
+function hebrewRun(text: string, i: number, dir: 1 | -1): number {
+  let n = 0;
+  for (let k = i; k >= 0 && k < text.length; k += dir) {
+    const ch = text[k];
+    if (HEB_BASE.test(ch)) n++;
+    else if (!HEB_MARK.test(ch)) break;
+  }
+  return n;
+}
+
+/**
+ * Layout training T3.2 — what a quote mark at `index` is, per the
+ * hebrew-book-typesetter rules (inspect_body --fix-quotes):
+ *  - a double quote before the LAST letter of a word (רש"י, רמב"ם) → gershayim;
+ *  - a single quote right after a word's last letter (ד', וכו') or inside
+ *    a loanword (ג'ירפה) → geresh;
+ *  - an opening quote after a prefix letter (ו"שלום), an opening quote at
+ *    a word start, a closing quote, or a single-quoted phrase ('לא') →
+ *    quotation (left alone).
+ * Nikkud and teamim between the letters are allowed (רַשִׁ"י).
+ */
+export function classifyHebrewQuote(text: string, index: number): 'gershayim' | 'geresh' | 'quotation' {
+  const ch = text[index];
+  const before = hebrewRun(text, index - 1, -1);
+  const after = hebrewRun(text, index + 1, 1);
+  const isDouble = ch === '"' || ch === '\u201C' || ch === '\u201D' || ch === '\u2033';
+  if (before === 0) return 'quotation';
+  if (isDouble) return after === 1 ? 'gershayim' : 'quotation';
+  if (after >= 1) return 'geresh';
+  // A closing single quote of a quoted phrase: the word opened with one.
+  let k = index - 1;
+  while (k >= 0 && (HEB_BASE.test(text[k]) || HEB_MARK.test(text[k]))) k--;
+  if (k >= 0 && /['\u2018\u2019]/.test(text[k])) return 'quotation';
+  return 'geresh';
+}
+
 export function checkPunctuation(text: string, unitId?: string): TextIssue[] {
   const issues: TextIssue[] = [];
 
@@ -182,42 +222,38 @@ export function checkPunctuation(text: string, unitId?: string): TextIssue[] {
     );
   }
 
-  // Straight double quote next to a Hebrew letter -> ״ (U+05F4).
-  for (const m of text.matchAll(/"/g)) {
-    const prev = m.index > 0 ? text[m.index - 1] : '';
-    const next = text[m.index + 1] ?? '';
-    if (!new RegExp(HEBREW_LETTER).test(prev) && !new RegExp(HEBREW_LETTER).test(next)) continue;
-    issues.push(
-      makeIssue(
-        'punctuation',
-        m.index,
-        1,
-        'גרשיים ישרים (") — בספרי קודש משתמשים ב־״.',
-        'Straight double quote (") — holy books use ״.',
-        '\u05F4',
-        true,
-        unitId
-      )
-    );
-  }
-
-  // Straight single quote / apostrophe next to a Hebrew letter -> ׳ (U+05F3).
-  for (const m of text.matchAll(/'/g)) {
-    const prev = m.index > 0 ? text[m.index - 1] : '';
-    const next = text[m.index + 1] ?? '';
-    if (!new RegExp(HEBREW_LETTER).test(prev) && !new RegExp(HEBREW_LETTER).test(next)) continue;
-    issues.push(
-      makeIssue(
-        'punctuation',
-        m.index,
-        1,
-        "גרש ישר (') — בספרי קודש משתמשים ב־׳.",
-        "Straight single quote (') — holy books use ׳.",
-        '\u05F3',
-        true,
-        unitId
-      )
-    );
+  // Layout training T3.2 (hebrew-book-typesetter rules): straight or
+  // curly quotes INSIDE abbreviations become gershayim / geresh, while
+  // real quotation marks stay. See classifyHebrewQuote().
+  for (const m of text.matchAll(/["'\u201C\u201D\u2018\u2019\u2033]/g)) {
+    const kind = classifyHebrewQuote(text, m.index);
+    if (kind === 'gershayim') {
+      issues.push(
+        makeIssue(
+          'punctuation',
+          m.index,
+          1,
+          'מירכאות בתוך ראשי תיבות — בספר מודפס משתמשים בגרשיים (״).',
+          'Quote mark inside an abbreviation — print uses gershayim (״).',
+          '\u05F4',
+          true,
+          unitId
+        )
+      );
+    } else if (kind === 'geresh') {
+      issues.push(
+        makeIssue(
+          'punctuation',
+          m.index,
+          1,
+          'גרש ישר בקיצור — בספר מודפס משתמשים בגרש (׳).',
+          'Straight apostrophe in an abbreviation — print uses geresh (׳).',
+          '\u05F3',
+          true,
+          unitId
+        )
+      );
+    }
   }
 
   return issues;

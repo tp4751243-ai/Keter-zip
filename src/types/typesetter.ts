@@ -757,6 +757,25 @@ export interface PageGeometry {
   marginInside: number;  // binding gutter
   marginOutside: number;
   isVerso: boolean;      // left vs right in spread
+  /**
+   * Layout training T3.1 (right-bound Hebrew book) — physical x of the
+   * text block's LEFT edge on this page. A Hebrew book binds on the
+   * right: a recto is the LEFT-hand page and binds on its right edge, so
+   * its left margin is the OUTSIDE margin; a verso binds on its left, so
+   * its left margin is the INSIDE margin. Set per body page by the
+   * paginator; read through `textBlockLeft()` by every renderer.
+   */
+  textLeftPt?: number;
+}
+
+/** Physical x of the text block's left edge (see PageGeometry.textLeftPt). */
+export function textBlockLeft(g: PageGeometry): number {
+  return g.textLeftPt ?? g.marginInside;
+}
+
+/** Physical x of the text block's right edge. */
+export function textBlockRight(g: PageGeometry): number {
+  return textBlockLeft(g) + (g.pageWidth - g.marginInside - g.marginOutside);
 }
 
 export interface LocalFontEntry {
@@ -889,6 +908,12 @@ export interface PageTypesetResult {
    * suppressed on it, and the body pages that follow are numbered from 2.
    */
   isTitlePage?: boolean;
+  /**
+   * Layout training T3.4 — the back of the title page (a verso). Its
+   * presence makes the body open on a recto, as a right-bound book
+   * requires. Carries no header, folio or title; the imprint goes here.
+   */
+  isBackOfTitle?: boolean;
 }
 
 export type TypesetResult = PageTypesetResult;

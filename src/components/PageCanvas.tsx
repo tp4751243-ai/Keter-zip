@@ -9,6 +9,7 @@ import {
   AnchorLink,
   SeparatorStyleId,
 } from '../types/typesetter';
+import { textBlockLeft, textBlockRight } from '../types/typesetter';
 import {
   ZoomIn,
   ZoomOut,
@@ -533,8 +534,13 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
   const pageH = Math.round(geometry.pageHeight * scale);
   const marginT = geometry.marginTop * scale;
   const marginB = geometry.marginBottom * scale;
-  const marginIn = geometry.marginInside * scale;
-  const marginOut = geometry.marginOutside * scale;
+  // Layout training T3.1 — the screen uses the SAME text-block position
+  // as the PDF (textBlockLeft: mirrored per page for a right-bound book).
+  // Below, `marginOut` is the LEFT pad and `marginIn` the RIGHT pad of the
+  // text block (the names predate mirroring; every use positions the
+  // content with right: marginIn / left: marginOut).
+  const marginOut = textBlockLeft(geometry) * scale;
+  const marginIn = (geometry.pageWidth - textBlockRight(geometry)) * scale;
 
   const contentW = pageW - marginIn - marginOut;
   const contentH = pageH - marginT - marginB;
@@ -2379,7 +2385,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
             {/* v0.5.0 (Title Page / Shaar Blat builder): the title page has
                 no typeset lines — the overlay draws its border and editable
                 fields from `designSettings.titlePage` instead. */}
-            {isTitlePage && titlePageSettings && (
+            {isTitlePage && !typesetResult.isBackOfTitle && titlePageSettings && (
               <TitlePageOverlay
                 titlePage={titlePageSettings}
                 bookTitle={headerTitle}
@@ -2407,10 +2413,8 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                 never overlaps the text. v0.5.0 (Title Page): never on a
                 title page. */}
             {/* Layout training T2.1 — Vilna running head. The engine laid
-                out every word (physical pt, text block starting at
-                marginInside); the screen's content area starts at
-                marginOut, so x is mapped through the content-relative
-                offset. Replaces the generic band, folio and footer. */}
+                out every word in physical page pt, so x maps straight to
+                screen px. Replaces the generic band, folio and footer. */}
             {vilnaHeader && !isTitlePage &&
               vilnaHeader.items.flatMap((it, ii) =>
                 it.words.map((w, wi) => (
@@ -2419,7 +2423,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                     data-testid={it.kind === 'folio' ? 'vilna-header-folio' : 'vilna-header-title'}
                     className="absolute pointer-events-none text-[#1E1C1A] whitespace-nowrap"
                     style={{
-                      left: `${(w.xLeft - geometry.marginInside) * scale + marginOut}px`,
+                      left: `${w.xLeft * scale}px`,
                       width: `${(w.xRight - w.xLeft) * scale}px`,
                       top: `${(it.yBaseline - it.fontSizePt * 0.82) * scale}px`,
                       fontSize: `${it.fontSizePt * scale}px`,

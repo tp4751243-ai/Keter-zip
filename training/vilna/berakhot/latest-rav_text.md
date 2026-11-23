@@ -1,6 +1,6 @@
 # Vilna scorecard — Berakhot (rav_text)
 
-Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
+Layout type: `rav_text` · pages: 5 · **score 90%** (45/50 scored checks)
 
 | Rule | Pass | Fail |
 |---|---|---|
@@ -14,6 +14,7 @@ Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
 | T1 `גמ׳` marker: one per Mishna→Gemara boundary | 0 | 0 |
 | L1 Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82) | 5 | 0 |
 | L2 Even justification (p95 word gap ≤ 0.6 em) | 1 | 4 |
+| B1 Inside margin on the binding side (right-bound book) | 5 | 0 |
 | P1 Page filled to the bottom margin (≥ 95%) | 3 | 1 |
 | P2 No overlapping lines, nothing off the page | 5 | 0 |
 | A1 Gemara amudim on this page (Vilna: exactly one) | 0 | 0 |
@@ -34,6 +35,7 @@ Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
 - ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 1 literal "גמ׳" words on page
 - ✅ **L1** Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82) — 10.6pt / 12.9pt = 0.82
 - ✅ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.41 em, p95 0.53 em over 13 lines
+- ✅ **B1** Inside margin on the binding side (right-bound book) — left 28.3pt, right 34.0pt (inside 34.0pt should be on the right)
 - ❌ **P1** Page filled to the bottom margin (≥ 95%) — 88% of the text block used
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
 - ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2a:22 lines
@@ -48,6 +50,7 @@ Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
 - ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 0 literal "גמ׳" words on page
 - ✅ **L1** Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82) — 10.6pt / 12.9pt = 0.82
 - ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.45 em, p95 1.29 em over 37 lines
+- ✅ **B1** Inside margin on the binding side (right-bound book) — left 34.0pt, right 28.3pt (inside 34.0pt should be on the left)
 - ✅ **P1** Page filled to the bottom margin (≥ 95%) — 99% of the text block used
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
 - ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2a:11 lines, 2b:41 lines
@@ -62,6 +65,7 @@ Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
 - ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 1 literal "גמ׳" words on page
 - ✅ **L1** Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82) — 10.6pt / 12.9pt = 0.82
 - ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.40 em, p95 1.07 em over 32 lines
+- ✅ **B1** Inside margin on the binding side (right-bound book) — left 28.3pt, right 34.0pt (inside 34.0pt should be on the right)
 - ✅ **P1** Page filled to the bottom margin (≥ 95%) — 96% of the text block used
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
 - ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2b:14 lines, 3a:35 lines
@@ -76,6 +80,7 @@ Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
 - ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 1 literal "גמ׳" words on page
 - ✅ **L1** Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82) — 10.6pt / 12.9pt = 0.82
 - ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.37 em, p95 0.74 em over 30 lines
+- ✅ **B1** Inside margin on the binding side (right-bound book) — left 34.0pt, right 28.3pt (inside 34.0pt should be on the left)
 - ✅ **P1** Page filled to the bottom margin (≥ 95%) — 99% of the text block used
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
 - ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 3a:22 lines, 3b:29 lines
@@ -90,6 +95,7 @@ Layout type: `rav_text` · pages: 5 · **score 89%** (40/45 scored checks)
 - ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 1 literal "גמ׳" words on page
 - ✅ **L1** Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82) — 10.6pt / 12.9pt = 0.82
 - ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.37 em, p95 0.95 em over 17 lines
+- ✅ **B1** Inside margin on the binding side (right-bound book) — left 28.3pt, right 34.0pt (inside 34.0pt should be on the right)
 - ℹ️ **P1** Page filled to the bottom margin (≥ 95%) — 58% of the text block used (last page — not scored)
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
 - ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 3b:28 lines

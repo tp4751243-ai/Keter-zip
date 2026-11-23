@@ -22,6 +22,7 @@
  * so all outputs agree and no renderer guesses widths.
  */
 import type { ContentUnit, PageTypesetResult, VilnaHeaderGeom, VilnaHeaderItem } from '../types/typesetter';
+import { textBlockLeft, textBlockRight } from '../types/typesetter';
 import type { RunningHeaderSettings } from '../types/design-settings';
 import { HarfBuzzShaperEngine } from './harfbuzz-emulator';
 
@@ -149,13 +150,13 @@ function measure(shaper: HarfBuzzShaperEngine, text: string, bold: boolean): num
 
 /**
  * Lay out the head for one page. Coordinates are physical page points:
- * the text block spans [marginInside, pageWidth − marginOutside], the same
- * frame every renderer uses for the body.
+ * the text block spans [textBlockLeft, textBlockRight] (mirrored per page),
+ * the same frame every renderer uses for the body.
  */
 export function layoutVilnaHeader(page: PageTypesetResult, perek: PerekInfo | undefined, opts: VilnaHeaderOptions): VilnaHeaderGeom {
   const g = page.geometry;
-  const left = g.marginInside;
-  const right = g.pageWidth - g.marginOutside;
+  const left = textBlockLeft(g);
+  const right = textBlockRight(g);
   const size = opts.fontSizePt;
   // Baseline sits just above the text block; never closer to the paper
   // edge than one line of the head itself.

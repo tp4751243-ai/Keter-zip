@@ -233,6 +233,27 @@ export function buildTitlePageResult(
 }
 
 /**
+ * Layout training T3.4 — the back of the title page (verso). With it the
+ * body opens on a recto: title (recto), its back (verso), body (recto) —
+ * the order of a right-bound Hebrew book (hebrew-book-typesetter rules).
+ * No header, no folio, no title.
+ */
+export function buildBackOfTitlePage(
+  geometry: PageGeometry,
+  layoutType: PageTypesetResult['layoutType'],
+  designSettings: unknown,
+  bookTitle: string
+): PageTypesetResult {
+  return {
+    ...buildTitlePageResult(geometry, layoutType, designSettings, bookTitle),
+    pageIndex: 1,
+    pageNumber: 2,
+    pageNumberHebrew: '',
+    isBackOfTitle: true,
+  };
+}
+
+/**
  * Roles that start a TOC entry, in outline order. `main_title` is the book
  * title itself and is normally excluded (it is the cover); it is included
  * only when `includeBookTitle` is set.
