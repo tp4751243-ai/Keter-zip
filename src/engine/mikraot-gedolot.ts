@@ -40,6 +40,8 @@ import type { TypesettingRulesConfig } from './typesetting-rules-engine';
 import { TypesetterEngine } from './typesetter-core';
 import { detectCommentator } from './auto-layout';
 import { hebrewNumeralBare } from './hebrew-numerals';
+import { fontLacksTeamim, TEAMIM_FALLBACK_FONT, wordHasTeamim } from './font-analyzer';
+import { requiredPitch } from './ink-clearance';
 
 /** Fitted proportions (from the user's Chumash photos: line pitch ratios). */
 export const MG_FIT = {
@@ -122,7 +124,12 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   // ── sizes and fonts ───────────────────────────────────────────────
   const rs = designSettings?.roleStyles;
   const pasukSize = rs?.main_source?.character?.fontSizePt ?? 16;
-  const pasukFont = rs?.main_source?.character?.fontFamily || 'Frank Ruhl Libre';
+  const chosenPasukFont = rs?.main_source?.character?.fontFamily || 'Frank Ruhl Libre';
+  // Layout training T9 — cantillated pesukim are set WHOLE in a face that
+  // has teamim (never word-by-word font switching inside a pasuk).
+  const pasukHasTeamim = units.some(u => u.role === 'main_source' && wordHasTeamim(u.rawText ?? ''));
+  const pasukFont = pasukHasTeamim && fontLacksTeamim(chosenPasukFont) ? TEAMIM_FALLBACK_FONT : chosenPasukFont;
+  const onkFont = chosenPasukFont;
   const onkSize = Math.round(pasukSize * MG_FIT.onkelosToPasuk * 10) / 10;
   const comSize = Math.round(pasukSize * MG_FIT.commentaryToPasuk * 10) / 10;
   const minorSize = Math.round(pasukSize * MG_FIT.minorCommentaryToPasuk * 10) / 10;
@@ -254,6 +261,9 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
     onkLines: TypesetLine[];
     bandLines: Map<string, TypesetLine[]>;
     height: number;
+    pasukPitch: number;
+    onkPitch: number;
+    bandPitch: Map<string, number>;
   }
   const carry = new Map<string, TypesetLine[]>(); // band key → lines carried to the next page
 
@@ -263,9 +273,13 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
     const oUnits: ContentUnit[] = [];
     for (let k = from; k < to; k++) oUnits.push(...(onkByPasuk.get(k) ?? []));
     const onkLines = hasOnkelos
-      ? setLines(oUnits.flatMap(u => shape(u, onkSize, pasukFont)), onkW, onkSize, pasukFont, 'verse', oUnits[0]?.id ?? 'onkelos')
+      ? setLines(oUnits.flatMap(u => shape(u, onkSize, onkFont)), onkW, onkSize, onkFont, 'verse', oUnits[0]?.id ?? 'onkelos')
       : [];
-    const topH = Math.max(pasukLines.length * lh(pasukSize), hasOnkelos ? (onkLines.length + 1) * lh(onkSize) : 0);
+    // Line pitch never lets the marks of one line touch the next (T9).
+    const pasukPitch = Math.max(lh(pasukSize), requiredPitch(pasukLines));
+    const onkPitch = Math.max(lh(onkSize), requiredPitch(onkLines));
+    const bandPitch = new Map<string, number>();
+    const topH = Math.max(pasukLines.length * pasukPitch, hasOnkelos ? (onkLines.length + 1) * onkPitch : 0);
     let height = topH;
     const bandLines = new Map<string, TypesetLine[]>();
     for (const b of bands) {
@@ -275,9 +289,11 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       const lines = [...(withCarry ? carry.get(b.key) ?? [] : []), ...fresh];
       if (!lines.length) continue;
       bandLines.set(b.key, lines);
-      height += MG_FIT.bandGapPt + lh(titleSize(b)) + Math.ceil(lines.length / 2) * lh(b.sizePt);
+      const bp = Math.max(lh(b.sizePt), requiredPitch(lines));
+      bandPitch.set(b.key, bp);
+      height += MG_FIT.bandGapPt + lh(titleSize(b)) + Math.ceil(lines.length / 2) * bp;
     }
-    return { pasukLines, onkLines, bandLines, height };
+    return { pasukLines, onkLines, bandLines, height, pasukPitch, onkPitch, bandPitch };
   };
 
   // ── paginate ──────────────────────────────────────────────────────
@@ -305,8 +321,11 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
     const onkX: [number, number] = onkOnRight ? [contentW - onkW, contentW] : [0, onkW];
     const sourceLines: TypesetLine[] = [];
     const extra: TypesetLine[] = [];
-    const place = (l: TypesetLine, x: [number, number], y: number, size: number) => {
+    const place = (l: TypesetLine, x: [number, number], y: number, size: number, pitch?: number) => {
       const asc = size * 0.8;
+      // A pitch opened for teamim leaves the extra room evenly above and below.
+      const extraTop = pitch !== undefined ? Math.max(0, (pitch - lh(size)) / 2) : 0;
+      y += extraTop;
       const out: TypesetLine = { ...l, words: l.words.map(w => ({ ...w })) };
       out.xLeft = x[0];
       out.xRight = x[1];
@@ -320,18 +339,18 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
     };
     let y = 0;
     best.pasukLines.forEach(l => {
-      if (y + lh(pasukSize) > contentH + 0.5 && sourceLines.length > 0) return;
-      sourceLines.push(place(l, pasukX, y, pasukSize));
-      y += lh(pasukSize);
+      if (y + best!.pasukPitch > contentH + 0.5 && sourceLines.length > 0) return;
+      sourceLines.push(place(l, pasukX, y, pasukSize, best!.pasukPitch));
+      y += best!.pasukPitch;
     });
     let yo = 0;
     if (hasOnkelos && best.onkLines.length) {
-      const title = setLines(engine(onkSize, pasukFont).shapeContentUnit({ id: 'onk-title', role: 'verse', rawText: 'אונקלוס', styleName: '', order: 0, hierarchyLevel: 0 } as ContentUnit), onkW, onkSize, pasukFont, 'verse', 'onk-title')[0];
+      const title = setLines(engine(onkSize, onkFont).shapeContentUnit({ id: 'onk-title', role: 'verse', rawText: 'אונקלוס', styleName: '', order: 0, hierarchyLevel: 0 } as ContentUnit), onkW, onkSize, onkFont, 'verse', 'onk-title')[0];
       if (title) extra.push({ ...place(title, onkX, yo, onkSize), alignment: 'center', paragraphAlignment: 'center', isJustified: false, fontWeight: 700 });
       yo += lh(onkSize);
       for (const l of best.onkLines) {
-        extra.push(place(l, onkX, yo, onkSize));
-        yo += lh(onkSize);
+        extra.push(place(l, onkX, yo, onkSize, best.onkPitch));
+        yo += best.onkPitch;
       }
     }
     y = Math.max(y, yo);
@@ -342,7 +361,7 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       const lines = best.bandLines.get(b.key);
       if (!lines?.length) continue;
       const tl = lh(titleSize(b));
-      const ll = lh(b.sizePt);
+      const ll = best.bandPitch.get(b.key) ?? lh(b.sizePt);
       if (y + MG_FIT.bandGapPt + tl + ll > contentH) {
         carry.set(b.key, lines);
         continue;
@@ -356,8 +375,8 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       const take = Math.min(lines.length, rows * 2);
       const right = lines.slice(0, Math.min(rows, take));
       const left = lines.slice(right.length, take);
-      right.forEach((l, i) => extra.push(place(l, [contentW - colW, contentW], y + i * ll, b.sizePt)));
-      left.forEach((l, i) => extra.push(place(l, [0, colW], y + i * ll, b.sizePt)));
+      right.forEach((l, i) => extra.push(place(l, [contentW - colW, contentW], y + i * ll, b.sizePt, ll)));
+      left.forEach((l, i) => extra.push(place(l, [0, colW], y + i * ll, b.sizePt, ll)));
       y += rows * ll;
       if (take < lines.length) carry.set(b.key, lines.slice(take));
     }

@@ -20,6 +20,8 @@
  *  C8  nothing overlaps; nothing leaves the text block
  *  C9  page fill ≥ 85% (except the last page)
  *  C10 no text lost: every pasuk, Onkelos and Rashi word is placed
+ *  C11 nikkud / teamim of one line never touch the next (measured ink)
+ *  C12 the pesukim are set in ONE face (no word-by-word font switching)
  *
  * Output: training/out/chumash/<book>/page-N.png, scorecard.json / .md.
  */
@@ -51,6 +53,7 @@ import { DesignSettingsEngine } from '../../src/engine/design-settings-engine';
 import { applyRecipeToSettingsById } from '../../src/engine/auto-layout';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { PdfExporter } from '../../src/engine/pdf-exporter';
+import { clearanceIssues } from '../../src/engine/ink-clearance';
 
 const args = process.argv.slice(2);
 const book = args.find(a => !a.startsWith('--') && !/^\d/.test(a)) ?? 'deuteronomy';
@@ -213,6 +216,18 @@ if (process.env.MG_DUMP) {
   for (const l of [...p.sourceLines, ...(p.marginLines ?? [])].sort((a, b) => a.yBaseline - b.yBaseline || (b.xRight ?? 0) - (a.xRight ?? 0)))
     console.log(l.role.padEnd(16), l.yBaseline.toFixed(1).padStart(6), (l.xLeft ?? 0).toFixed(0).padStart(4), (l.xRight ?? 0).toFixed(0).padStart(4), l.words.filter(w => !w.isSpace).length, l.words.filter(w => !w.isSpace).slice(-3).map(w => w.text).join(' '));
 }
+// C11: the marks of one line never touch the next (nikkud + teamim ink).
+const ink: string[] = [];
+pages.forEach(p => {
+  for (const group of [p.sourceLines, (p.marginLines ?? []).filter(l => l.role !== 'heading' && l.unitId !== 'onk-title')]) {
+    const bad = clearanceIssues(group, 0.3);
+    if (bad.length) ink.push(`${p.bodyPageIndex}:${bad.length} (worst ${Math.min(...bad.map(b => b.gapPt)).toFixed(1)}pt)`);
+  }
+});
+check('C11', ink.length === 0, ink.slice(0, 4).join(', ') || 'marks clear on every line');
+const mixed = pages.flatMap(p => p.sourceLines.flatMap(l => l.words.filter(w => !w.isSpace).map(w => w.fontFamily ?? l.fontFamily)));
+check('C12', new Set(mixed).size <= 1, `pasuk faces: ${[...new Set(mixed)].join(', ')}`);
+
 const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);
 const outDir = path.resolve('training/out/chumash', book);
 fs.mkdirSync(outDir, { recursive: true });

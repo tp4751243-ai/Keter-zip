@@ -23,6 +23,7 @@
  *  P10 page fill ≥ 80% except chapter ends and the last page
  *  P11 every drawn word inside its column box (indents included); no overlaps
  *  P12 no line starts with punctuation
+ *  P13 nikkud never touches the next line (measured ink)
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -56,6 +57,7 @@ import { DesignSettingsEngine } from '../../src/engine/design-settings-engine';
 import { applyRecipeToSettingsById, classifyDocument, decideAutoLayout } from '../../src/engine/auto-layout';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { PdfExporter } from '../../src/engine/pdf-exporter';
+import { clearanceIssues } from '../../src/engine/ink-clearance';
 
 const args = process.argv.slice(2);
 const render = !args.includes('--no-render');
@@ -171,6 +173,8 @@ async function main() {
   }
   const punctStart = pages.flatMap(p => lines(p).filter(l => /^[:;,.!?׃)\]]/.test(l.words.find(w => !w.isSpace)?.text ?? '')).map(l => `${p.bodyPageIndex}:${l.words.find(w => !w.isSpace)?.text}`));
   check('P12', punctStart.length === 0, punctStart.slice(0, 4).join(' ') || 'no line starts with punctuation');
+  const inkBad = pages.filter(p => clearanceIssues(p.sourceLines, 0.3).length > 0).map(p => p.bodyPageIndex);
+  check('P13', inkBad.length === 0, inkBad.length ? `ink touching on pages ${inkBad.join(',')}` : 'marks clear on every line');
   check('P11', spill.length === 0, spill.slice(0, 5).join(' ') || 'every word inside its column');
 
   const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);
