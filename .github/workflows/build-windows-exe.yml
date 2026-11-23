@@ -8,13 +8,16 @@ name: Build Windows EXE
 on:
   workflow_dispatch:
   push:
-    branches: [react]
+    # react = the original development branch; claude/confident-brown-d95gce
+    # = this repository's default branch (holds the layout-training work).
+    branches: [react, claude/confident-brown-d95gce]
     paths:
       - 'electron/**'
       - 'package.json'
       - 'vite.config.ts'
       - 'src/**'
       - 'index.html'
+      - 'public/fonts/**'
       - '.github/workflows/build-windows-exe.yml'
 
 permissions:

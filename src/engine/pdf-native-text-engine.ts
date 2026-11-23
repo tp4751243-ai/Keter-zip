@@ -101,6 +101,31 @@ export interface ExtractedPdfDocument {
 }
 
 export class PdfNativeTextEngine {
+  /**
+   * Load a file shipped in `public/` (e.g. '/fonts/X.ttf'). Resolved
+   * against the page's own base URL, so it works from a web server AND
+   * from the installed Electron app, which loads dist/index.html from
+   * disk (file://) — where '/fonts/…' would point at the drive root and
+   * Chromium's fetch() cannot read file:// URLs at all (XHR can).
+   */
+  public static async loadPublicBinary(publicPath: string): Promise<ArrayBuffer | null> {
+    const rel = publicPath.replace(/^\//, '');
+    const base = typeof document !== 'undefined' && document.baseURI ? document.baseURI : undefined;
+    const url = base ? new URL(rel, base).href : publicPath;
+    if (url.startsWith('file:') && typeof XMLHttpRequest !== 'undefined') {
+      return new Promise(resolve => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.responseType = 'arraybuffer';
+        xhr.onload = () => resolve(xhr.status === 0 || xhr.status === 200 ? (xhr.response as ArrayBuffer) : null);
+        xhr.onerror = () => resolve(null);
+        xhr.send();
+      });
+    }
+    const res = await fetch(url);
+    return res.ok ? res.arrayBuffer() : null;
+  }
+
   private static fontBase64Cache: Map<string, string> = new Map();
   /**
    * User-provided font binaries are kept in memory for this browser session and embedded
@@ -266,9 +291,8 @@ export class PdfNativeTextEngine {
         // caller (registerFontsOnDoc) then reports it by name instead of
         // crashing here.
         try {
-          const res = await fetch(spec.publicPath);
-          if (res.ok) {
-            const buf = await res.arrayBuffer();
+          const buf = await PdfNativeTextEngine.loadPublicBinary(spec.publicPath);
+          if (buf) {
             const bytes = new Uint8Array(buf);
             let binary = '';
             const chunkSize = 0x8000;
