@@ -2269,7 +2269,7 @@ export const MUSSAR_RECIPE: LayoutRecipe = {
     name: 'Mussar Sefer',
     nameHe: 'ספר מוסר',
     description:
-      'Mussar sefer (Mesillat Yesharim, Chovot HaLevavot, Orchos Tzaddikim): single-column systematic prose, chapter / sha\u2019ar headings centred, first-line indents. Often vowelized (nikud) — a text property, not layout geometry, recorded here rather than modelled. Chovot HaLevavot has 10 gates (she\u2019arim). No dibbur — chapter headings only.',
+      'Mussar sefer (Mesillat Yesharim, Chovot HaLevavot, Orchos Tzaddikim): systematic prose in two justified columns, chapter / sha\u2019ar headings centred, first-line indents. Often vowelized (nikud) — a text property, not layout geometry, recorded here rather than modelled. Chovot HaLevavot has 10 gates (she\u2019arim). No dibbur — chapter headings only.',
     descriptionHe: 'פרוזה שיטתית בטור יחיד, כותרות פרקים ושערים ממורכזות, לרוב מנוקדת.',
     genre: ['mussar', 'מוסר', 'mesillat yesharim', 'מסילת ישרים', 'chovot halevavot', 'חובות הלבבות', 'orchos tzaddikim', 'אורחות צדיקים'],
     origin: 'Traditional Mussar editions (single-column prose)',
@@ -2317,7 +2317,9 @@ export const MUSSAR_RECIPE: LayoutRecipe = {
     marginInsideMm: 12,
     marginOutsideMm: 12,
   },
-  baseLayout: 'single_column',
+  // Layout training T8 — the user's reference page (Mesilat Yesharim):
+  // two justified columns under a full-width perek opening.
+  baseLayout: 'two_column',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3157,7 +3159,12 @@ export function suggestRecipeBySignals(c: DocumentClassification): RecipeSuggest
       return { recipeId, evidence: e, confidence };
     });
   if (eligible.length === 0) return null;
+  // Layout training T8 — a work NAMED in the title (מסילת ישרים) beats a
+  // genre word that merely occurs in the body ("מדרש" quoted in a Mussar
+  // text): the title says what the book is.
+  const namedInTitle = (x: (typeof eligible)[number]) => x.evidence.strong.some(s => s.source === 'title');
   eligible.sort((a, b) => {
+    if (namedInTitle(a) !== namedInTitle(b)) return namedInTitle(a) ? -1 : 1;
     // Specificity GROUP first, then evidence inside the group: more
     // strong signals, then higher confidence. (A flat list position
     // must not decide inside a group — a Kehati signal beats a bare

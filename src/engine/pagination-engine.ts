@@ -89,6 +89,7 @@ import {
   type QueuedMarginal,
 } from './vilna-marginalia';
 import { paginateMikraotGedolot, chumashHeaderParts } from './mikraot-gedolot';
+import { paginateProseColumns } from './prose-columns';
 import { derivePerakim, layoutHeaderParts, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
@@ -318,6 +319,20 @@ export class PaginationEngine {
         );
         break;
       case 'two_column':
+        // Layout training T8 — real two-column flow (spanning headings,
+        // balanced columns, column boxes). The old line-count pager stays
+        // reachable for one release: columns.pager = 'legacy'.
+        if ((designSettings?.columns as { pager?: string } | undefined)?.pager !== 'legacy') {
+          doc = paginateProseColumns({
+            title,
+            units,
+            geometry,
+            fontSize: effectiveSourceFontSize,
+            designSettings,
+            rulesConfig,
+          });
+          break;
+        }
         doc = this.paginateTwoColumn(
           title,
           units,
@@ -765,6 +780,19 @@ export class PaginationEngine {
             fontSizePt: vilnaHeaderSize,
           });
           // A Vilna daf carries no continuation notes.
+          pg.continuationHeader = undefined;
+          pg.continuationFooter = undefined;
+        } else if (pg.runningChapter !== undefined && !talmudFolio) {
+          // Layout training T8 — prose head: book · perek centred, page
+          // number on the outer corner.
+          pg.vilnaHeader = layoutHeaderParts(
+            pg,
+            [title, pg.runningChapter],
+            folioInfo.folioDisplay,
+            spreadSide,
+            vilnaHeaderFont,
+            Math.round(effectiveSourceFontSize * 0.85 * 10) / 10
+          );
           pg.continuationHeader = undefined;
           pg.continuationFooter = undefined;
         } else if (layoutType === 'mikraot_gedolot' && !talmudFolio) {

@@ -179,6 +179,11 @@ export interface ParagraphStyleSettings {
   /** Number of indented lines for 'chalon_window' (1..6, default 2) */
   chalonLineCount?: number;
   tabStopsPt: number[];
+  /**
+   * Layout training T8 — number of opening words of each paragraph set
+   * bold (the פתיח of a prose sefer: "יסוד החסידות…"). 0 / absent = off.
+   */
+  openingWordsBold?: number;
   justifyNonFinalLines: boolean;
   hyphenation: 'none' | 'hebrew_maqaf' | 'standard';
   keepWithNext: boolean;

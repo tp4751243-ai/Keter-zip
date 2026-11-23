@@ -310,7 +310,7 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       const out: TypesetLine = { ...l, words: l.words.map(w => ({ ...w })) };
       out.xLeft = x[0];
       out.xRight = x[1];
-      out.targetWidth = x[1] - x[0];
+      out.targetWidth = Math.min(l.targetWidth || x[1] - x[0], x[1] - x[0]);
       out.yBaseline = y + asc;
       out.yTop = y;
       out.yBottom = y + size * 1.04;

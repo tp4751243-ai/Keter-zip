@@ -45,6 +45,8 @@ jobs:
         run: npx tsx scripts/training/import-classifier-test.ts
       - name: Mikraot Gedolot page rules (Devarim 1–2)
         run: npx tsx scripts/training/chumash-harness.ts deuteronomy --no-render --min-score 100
+      - name: Brace-tagged prose sefer (Mesilat Yesharim, two columns)
+        run: npx tsx scripts/training/prose-harness.ts --no-render --min-score 100
 
   build-windows:
     needs: layout-rules

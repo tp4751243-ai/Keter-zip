@@ -158,9 +158,23 @@ export class TypesetterEngine {
     // The shaper's own family when no design settings resolve a style
     // (engines that size and set fonts themselves, e.g. Mikraot Gedolot).
     const baseFamily = this.shaper.getFontFamily();
+    // Layout training T8 — the paragraph's opening word(s) bold (prose פתיח).
+    const openingBold = this.designSettings
+      ? Math.max(0, Math.floor(DesignSettingsEngine.resolveRoleAndUnitStyle(this.designSettings, unit.role, unit.id).paragraph?.openingWordsBold ?? 0))
+      : 0;
 
     for (const run of runs) {
-      const tokens = run.text.trim().split(/\s+/).filter(Boolean);
+      // Punctuation typed after a space ("כב א) :") stays on its word —
+      // it may never start a line on its own.
+      const tokens = run.text
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .reduce<string[]>((acc, t) => {
+          if (acc.length > 0 && /^[:;,.!?׃\u05C3)\]״"']+$/.test(t)) acc[acc.length - 1] += t;
+          else acc.push(t);
+          return acc;
+        }, []);
       for (let tIdx = 0; tIdx < tokens.length; tIdx++) {
         const token = tokens[tIdx];
 
@@ -205,7 +219,7 @@ export class TypesetterEngine {
         if (runFontSizePt) this.shaper.setFontSize(runFontSizePt);
 
         const effectiveIsBold = resolvedChar
-          ? Boolean(resolvedChar.isBold || (!run.isDibbur && run.isBold))
+          ? Boolean(resolvedChar.isBold || (!run.isDibbur && run.isBold) || globalWordIndex < openingBold)
           : Boolean(run.isBold || run.isDibbur);
 
         const shaped = this.shaper.shapeWord(token, {
@@ -254,6 +268,18 @@ export class TypesetterEngine {
       this.shaper.setTrackingEm(0);
       this.shaper.setHorizontalScalePercent(100);
       this.shaper.setWordSpacingRatio(1.0);
+    }
+
+    // Punctuation that arrived as its own run (after a citation run:
+    // "(עירובין כב א)" + " : היום") joins the word before it.
+    for (let i = words.length - 1; i > 0; i--) {
+      const w = words[i];
+      if (w.footnoteMarker === undefined && /^[:;,.!?׃\u05C3)\]״"']+$/.test(w.text)) {
+        const prev = words[i - 1];
+        prev.text += w.text;
+        prev.width += w.width;
+        words.splice(i, 1);
+      }
     }
 
     if (words.length > 0) {

@@ -79,6 +79,12 @@ const RECIPE_TYPES: Record<string, SeferType> = {
   siddur: 'siddur',
   machzor: 'siddur',
   'yiddish-sefer': 'yiddish',
+  mussar: 'prose',
+  tanya: 'prose',
+  'chassidic-drush': 'prose',
+  'machon-edition': 'prose',
+  midrash: 'prose',
+  'ein-yaakov': 'prose',
   tzenerene: 'yiddish',
 };
 
@@ -141,6 +147,26 @@ export function applySeferTypeRulesInPlace(next: ProfessionalDesignSettings, typ
     }
     // Ein Mishpat / Masoret HaShas side columns — Talmud only.
     next.ravText.marginalColumns = { enabled: talmud };
+  }
+  // Layout training T8 — body weight and the opening word. A Gemara is
+  // set semi-bold (600) throughout; a prose sefer is set regular with
+  // the first word of each paragraph bold (the user's Mesilat Yesharim
+  // reference). A weight the user changed is kept.
+  const prose = type === 'prose';
+  const prs = (next.projectRoleStyles ??= {} as ProfessionalDesignSettings['projectRoleStyles']);
+  for (const role of ['main_source', 'regular_paragraph'] as const) {
+    const cur = prs[role] ?? {};
+    const ch = { ...(cur.character ?? {}) };
+    const para = { ...(cur.paragraph ?? {}) };
+    // Our own earlier value is replaced; a weight the user chose is kept.
+    const ours = ch.fontWeight === undefined || (cur as { seferTypeWeight?: boolean }).seferTypeWeight;
+    if (ours) {
+      if (prose) ch.fontWeight = 400;
+      else delete ch.fontWeight;
+    }
+    if (prose) para.openingWordsBold = Math.max(1, para.openingWordsBold ?? 1);
+    else delete para.openingWordsBold;
+    prs[role] = { ...cur, character: ch, paragraph: para, ...(ours ? { seferTypeWeight: prose } : {}) } as typeof cur;
   }
   // A Vilna folio page inherited from a Talmud book goes back to the
   // general book page; a page the user or a ready design chose stays.

@@ -639,6 +639,16 @@ export function applyRecipeToSettingsById(
   if (VILNA_KNEE_RECIPES.has(resolvedId)) {
     next = DesignSettingsEngine.updateLayoutSettings(next, { layoutType: 'rav_text' }, 'ai');
   }
+  // Layout training T8 — a plain design (running head + body + notes, no
+  // commentary regions) is laid out by the built-in engine of its base
+  // layout (single / two columns: headings span the block, columns
+  // balance, notes at the foot) — not by custom boxes.
+  if (
+    (recipe.baseLayout === 'single_column' || recipe.baseLayout === 'two_column') &&
+    recipe.regions.every(r => /^(header|main_text|footnote)(-|$)/.test(r.id))
+  ) {
+    next = DesignSettingsEngine.updateLayoutSettings(next, { layoutType: recipe.baseLayout }, 'ai');
+  }
   // Layout training T7 — a Chumash-family design is laid out by the
   // Mikraot Gedolot engine (pasuk + Onkelos, titled commentary bands).
   if (MIKRAOT_RECIPES.has(resolvedId)) {

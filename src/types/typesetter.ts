@@ -851,6 +851,8 @@ export interface PageTypesetResult {
   chumashFirstPasuk?: number;
   /** Layout training T7 — headings (perek / parsha) that open on this page. */
   chumashHeadings?: string[];
+  /** Layout training T8 — prose pages: the perek in effect on the page (for the book · perek head). */
+  runningChapter?: string;
   /**
    * Layout training T2.2 — set on the page where the knee solver reserved
    * the opening frame's space at the top of the Gemara column; the frame

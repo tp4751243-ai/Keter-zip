@@ -1228,13 +1228,18 @@ export class PdfExporter {
 
     const buildLineCommand = (
       line: TypesetLine,
-      physXRight: number,
+      physXRightIn: number,
       physYBaseline: number,
       fontFamily: string,
       fontSizePt: number,
       baseFontWeight: number,
       isCenteredHeading: boolean = false
     ): PdfLineDrawCommand => {
+      // A line that carries its own box is drawn in it (column engines set
+      // xLeft / xRight; a branch's default anchor must never override it —
+      // two-column pages drew both columns on top of each other).
+      const physXRight =
+        line.xLeft !== undefined && line.xRight !== undefined ? mLeft + line.xRight : physXRightIn;
       const effectiveFontFamily = line.fontFamily || fontFamily;
       const effectiveFontSizePt = line.fontSizePt ?? fontSizePt;
       const effectiveFontWeight = line.fontWeight ?? baseFontWeight;

@@ -22,6 +22,7 @@ import {
   runFontSizePt,
   computeModalFontSizePt,
 } from './docx-semantics';
+import { applyBraceTags, looksBraceTagged } from './brace-tags';
 
 export interface DocxImportResult {
   fileName: string;
@@ -270,6 +271,7 @@ export class DocxImporter {
     // intentionally distinct from ContentUnit count (which also includes tables and footnotes).
     const totalParagraphs = docDom.getElementsByTagName('w:p').length;
     const units: ContentUnit[] = [];
+    const importWarnings: string[] = [];
     const links: RavTextLink[] = [];
     let orderIndex = 0;
     let hasNikud = false;
@@ -672,6 +674,16 @@ export class DocxImporter {
       }
     }
 
+    // Layout training T8 — brace-tagged sources ({9…9} title, {2…2} perek,
+    // {3…3} subtitle, {key: value} metadata): tags decide the structure.
+    let braceMeta: Record<string, string> = {};
+    if (looksBraceTagged(units)) {
+      const tagged = applyBraceTags(units);
+      units.splice(0, units.length, ...tagged.units);
+      braceMeta = tagged.metadata;
+      for (const w of tagged.warnings) importWarnings.push(w);
+    }
+
     // v0.9.8 Phase 2 — second pass over the parsed units: citation
     // spans, small-type citations, and (Shulchan Aruch context only)
     // Rema glosses. Runs are split at span boundaries and flagged; the
@@ -707,6 +719,7 @@ export class DocxImporter {
     for (const dropped of droppedImages) {
       validation.warnings.push(dropped);
     }
+    for (const w of importWarnings) validation.warnings.push(w);
 
     return {
       fileName,
@@ -714,7 +727,7 @@ export class DocxImporter {
       links,
       validation,
       metadata: {
-        title: fileName.replace(/\.[^/.]+$/, ''),
+        title: braceMeta.title?.trim() || fileName.replace(/\.[^/.]+$/, ''),
         totalParagraphs,
         hasNikud,
         hasTaamim,
