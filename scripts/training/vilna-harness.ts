@@ -63,6 +63,8 @@ import { DesignSettingsEngine } from '../../src/engine/design-settings-engine';
 import { applyRecipeToSettingsById } from '../../src/engine/auto-layout';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { PdfExporter, type PdfPageRenderPlan } from '../../src/engine/pdf-exporter';
+import { TypesetterEngine } from '../../src/engine/typesetter-core';
+if (process.env.KETER_BREAKER === 'greedy') TypesetterEngine.defaultLineBreaking = 'greedy';
 import { computeTalmudDafAmud } from '../../src/engine/vilna-shas';
 import { textBlockLeft, textBlockRight } from '../../src/types/typesetter';
 

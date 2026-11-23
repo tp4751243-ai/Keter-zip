@@ -1212,6 +1212,12 @@ export interface EffectiveResolvedFormatting {
 }
 
 export interface ProfessionalDesignSettings {
+  /**
+   * Layout training T10 — line breaking: 'optimal' (Knuth–Plass total
+   * fit with glyph stretch ≤ 2.5% and space shrink ≤ 20%, default) or
+   * 'greedy' (the first-fit breaker of v0.10.10 and earlier).
+   */
+  lineBreaking?: 'optimal' | 'greedy';
   projectId?: string;
   version: number;
   revision: number;

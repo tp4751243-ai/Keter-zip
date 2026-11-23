@@ -97,6 +97,7 @@ export function computeParagraphLineIndents(
 }
 
 import { TEAMIM_FALLBACK_FONT, fontLacksTeamim, wordHasTeamim } from './font-analyzer';
+import { optimalBreaks, applyGlyphStretch } from './line-breaker';
 
 export class TypesetterEngine {
   private shaper: HarfBuzzShaperEngine;
@@ -326,13 +327,78 @@ export class TypesetterEngine {
    * Composes pre-shaped words (preserving isDibbur, isBold, unitId, linkedSourceId, isParagraphEnd)
    * into justified TypesetLines.
    */
+  /** 'optimal' (Knuth–Plass, default) or 'greedy' (first fit, legacy). */
+  public lineBreaking(): 'optimal' | 'greedy' {
+    const m = (this.designSettings as { lineBreaking?: string } | undefined)?.lineBreaking ?? TypesetterEngine.defaultLineBreaking;
+    return m === 'greedy' ? 'greedy' : 'optimal';
+  }
+
+  /** Book default when a book sets no `lineBreaking` (tests compare both). */
+  public static defaultLineBreaking: 'optimal' | 'greedy' = 'optimal';
+
+  private computeOptimalBreaks(
+    words: ShapedWord[],
+    targetWidth: number,
+    defaultRole: ContentRole,
+    defaultUnitId: string,
+    isolateHeadings: boolean,
+    baseSpace: number
+  ): Set<number> | null {
+    const n = words.length;
+    if (n < 3) return null;
+    const isHeading = (r?: ContentRole) => r === 'chapter' || r === 'heading' || r === 'main_title' || r === 'siman';
+    const forced = new Set<number>();
+    for (let i = 0; i + 1 < n; i++) {
+      const a = words[i], b = words[i + 1];
+      if (isolateHeadings && a.unitId !== b.unitId && (isHeading(a.role) || isHeading(b.role))) forced.add(i);
+    }
+    // Per-word style lookups (cached per unit / role).
+    const styleCache = new Map<string, { firstW: number; restW: number; space: number; chalon: boolean }>();
+    const styleFor = (w: ShapedWord) => {
+      const role = w.role ?? defaultRole;
+      const unitId = w.unitId ?? defaultUnitId;
+      const key = `${role}|${unitId}`;
+      let st = styleCache.get(key);
+      if (!st) {
+        if (this.designSettings) {
+          const res = DesignSettingsEngine.resolveStyle(this.designSettings, { role, unitId });
+          const i0 = computeParagraphLineIndents(res.paragraph, 0);
+          const i1 = computeParagraphLineIndents(res.paragraph, 1);
+          const sub = (ind: typeof i0) => Math.max(40, targetWidth - ind.firstLineIndentPt - ind.hangingIndentPt - ind.rightIndentPt - ind.leftIndentPt);
+          const fSize = w.fontSizePt ?? res.character.fontSizePt ?? this.defaultFontSize;
+          const ws = w.wordSpacingRatio ?? res.character.wordSpacingRatio ?? 1.0;
+          st = { firstW: sub(i0), restW: sub(i1), space: Math.max(1.5, fSize * 0.32 * ws), chalon: res.paragraph.indentMode === 'chalon_window' };
+        } else {
+          st = { firstW: targetWidth, restW: targetWidth, space: baseSpace, chalon: false };
+        }
+        styleCache.set(key, st);
+      }
+      return st;
+    };
+    // A window (chalon) indent depends on the line count: keep first fit there.
+    if (words.some(w => styleFor(w).chalon)) return null;
+    const ends = optimalBreaks(
+      words.map(w => w.width),
+      i => styleFor(words[i]).space,
+      a => {
+        const st = styleFor(words[a]);
+        const firstOfUnit = a === 0 || words[a - 1].unitId !== words[a].unitId || forced.has(a - 1);
+        return firstOfUnit ? st.firstW : st.restW;
+      },
+      forced
+    );
+    return new Set(ends.filter(e => e < n - 1));
+  }
+
   public typesetShapedWords(
     nonSpaceWords: ShapedWord[],
     targetWidth: number,
     defaultRole: ContentRole = 'main_source',
     defaultUnitId: string = 'unit-1',
     lineHeight?: number,
-    justify: boolean = true
+    justify: boolean = true,
+    /** Override the book's line breaking for this call (planner counts use 'greedy'). */
+    breaking?: 'optimal' | 'greedy'
   ): TypesetLine[] {
     if (nonSpaceWords.length === 0 || targetWidth <= 10) return [];
 
@@ -363,6 +429,12 @@ export class TypesetterEngine {
       { role: defaultRole, unitId: defaultUnitId },
       this.rulesConfig
     );
+
+    // Layout training T10 — total-fit (Knuth–Plass) breaks, chosen for the
+    // whole paragraph at once. 'greedy' keeps the old first-fit breaker.
+    const breakAfter = justify && (breaking ?? this.lineBreaking()) === 'optimal'
+      ? this.computeOptimalBreaks(nonSpaceWords, targetWidth, defaultRole, defaultUnitId, Boolean(isolateHeadingRule.value), spaceWord.width)
+      : null;
 
     for (let i = 0; i < nonSpaceWords.length; i++) {
       const word = nonSpaceWords[i];
@@ -406,10 +478,10 @@ export class TypesetterEngine {
 
       const spaceNeeded = currentWords.length > 0 ? unitSpaceWidth : 0;
 
-      if (
-        (forceParagraphBreak || currentWidth + spaceNeeded + word.width > lineAvailableWidth) &&
-        currentWords.length > 0
-      ) {
+      const wantsBreak = breakAfter
+        ? breakAfter.has(i - 1)
+        : currentWidth + spaceNeeded + word.width > lineAvailableWidth;
+      if ((forceParagraphBreak || wantsBreak) && currentWords.length > 0) {
         const lineRole = currentWords[0].role ?? defaultRole;
         const lineUnitId = currentWords[0].unitId ?? defaultUnitId;
         const isHeadingLine =
@@ -425,8 +497,10 @@ export class TypesetterEngine {
           !isHeadingLine &&
           !forceParagraphBreak &&
           spaceCount > 0 &&
-          deficit > 0 &&
-          deficit < lineAvailableWidth * maxDeficitRule.value
+          // T10: a line the optimal breaker set slightly tight (spaces
+          // shrunk ≤ 20%) is justified too — its deficit is negative.
+          ((deficit > 0 && (breakAfter || deficit < lineAvailableWidth * maxDeficitRule.value)) ||
+            (breakAfter !== null && deficit < 0))
         ) {
           extraSpace = deficit / spaceCount;
           isJustified = true;
@@ -637,6 +711,12 @@ export class TypesetterEngine {
         }
         line.ascent = c.fontSizePt * 0.82;
         line.descent = c.fontSizePt * 0.24;
+        // T10 — glyph stretch (≤ 2.5%) before the spaces open wide.
+        if (this.lineBreaking() === 'optimal') {
+          applyGlyphStretch(line, Math.max(1.5, c.fontSizePt * 0.32 * (c.wordSpacingRatio ?? 1)));
+        }
+      } else if (this.lineBreaking() === 'optimal') {
+        applyGlyphStretch(line, spaceWord.width);
       }
       return line;
     });

@@ -57,6 +57,9 @@ import { DesignSettingsEngine } from '../../src/engine/design-settings-engine';
 import { applyRecipeToSettingsById, classifyDocument, decideAutoLayout } from '../../src/engine/auto-layout';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { PdfExporter } from '../../src/engine/pdf-exporter';
+import { TypesetterEngine } from '../../src/engine/typesetter-core';
+if (process.env.KETER_BREAKER === 'greedy') TypesetterEngine.defaultLineBreaking = 'greedy';
+import { justificationGaps } from '../../src/engine/justification-metrics';
 import { clearanceIssues } from '../../src/engine/ink-clearance';
 
 const args = process.argv.slice(2);
@@ -175,6 +178,18 @@ async function main() {
   check('P12', punctStart.length === 0, punctStart.slice(0, 4).join(' ') || 'no line starts with punctuation');
   const inkBad = pages.filter(p => clearanceIssues(p.sourceLines, 0.3).length > 0).map(p => p.bodyPageIndex);
   check('P13', inkBad.length === 0, inkBad.length ? `ink touching on pages ${inkBad.join(',')}` : 'marks clear on every line');
+  if (process.env.PH_GAPS) {
+    const rows: Array<[number, string]> = [];
+    for (const p of pages) for (const lc of PdfExporter.buildPageRenderPlan(p).lines) {
+      if (!lc.isJustified || lc.isLastLine || lc.role !== 'main_source') continue;
+      const ws = [...lc.words].sort((a, b) => b.xRight - a.xRight);
+      let worst = 0; for (let k = 1; k < ws.length; k++) worst = Math.max(worst, (ws[k - 1].xLeft - ws[k].xRight) / lc.fontSizePt);
+      rows.push([worst, `${ws.length}w tw=${lc.targetWidth} ${ws.map(w => w.text).join(' ')}`]);
+    }
+    rows.sort((a, b) => b[0] - a[0]).slice(0, 8).forEach(r => console.log(r[0].toFixed(2), r[1]));
+  }
+  const jg = justificationGaps(pages, new Set(['main_source', 'regular_paragraph']));
+  check('P14', jg.p95 <= 0.9, `widest gap per line: median ${jg.median.toFixed(2)} em, p95 ${jg.p95.toFixed(2)} em, max ${jg.max.toFixed(2)} em over ${jg.lines} lines`);
   check('P11', spill.length === 0, spill.slice(0, 5).join(' ') || 'every word inside its column');
 
   const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);

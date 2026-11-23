@@ -53,6 +53,9 @@ import { DesignSettingsEngine } from '../../src/engine/design-settings-engine';
 import { applyRecipeToSettingsById } from '../../src/engine/auto-layout';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { PdfExporter } from '../../src/engine/pdf-exporter';
+import { TypesetterEngine } from '../../src/engine/typesetter-core';
+if (process.env.KETER_BREAKER === 'greedy') TypesetterEngine.defaultLineBreaking = 'greedy';
+import { justificationGaps } from '../../src/engine/justification-metrics';
 import { clearanceIssues } from '../../src/engine/ink-clearance';
 
 const args = process.argv.slice(2);
@@ -228,6 +231,8 @@ check('C11', ink.length === 0, ink.slice(0, 4).join(', ') || 'marks clear on eve
 const mixed = pages.flatMap(p => p.sourceLines.flatMap(l => l.words.filter(w => !w.isSpace).map(w => w.fontFamily ?? l.fontFamily)));
 check('C12', new Set(mixed).size <= 1, `pasuk faces: ${[...new Set(mixed)].join(', ')}`);
 
+const jg = justificationGaps(pages, undefined);
+check('C13', jg.p95 <= 0.75, `widest gap per line: median ${jg.median.toFixed(2)} em, p95 ${jg.p95.toFixed(2)} em, max ${jg.max.toFixed(2)} em over ${jg.lines} lines`);
 const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);
 const outDir = path.resolve('training/out/chumash', book);
 fs.mkdirSync(outDir, { recursive: true });

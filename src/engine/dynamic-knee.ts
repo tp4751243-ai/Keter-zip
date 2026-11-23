@@ -32,6 +32,7 @@ import {
 } from './typesetting-rules-engine';
 import { ProfessionalDesignSettings } from '../types/design-settings';
 import { DesignSettingsEngine } from './design-settings-engine';
+import { applyGlyphStretch } from './line-breaker';
 
 export interface RavTextLayoutInput {
   sourceText: string;
@@ -634,12 +635,16 @@ export class DynamicKneeEngine {
         return cached;
       }
       trialLineCacheStats.misses++;
+      // The knee sets its lines one by one (first fit + T10 tightening),
+      // so the planner counts them the same way — and fast.
       const counted = engine.typesetShapedWords(
         words.slice(startIdx),
         targetWidth,
         role,
         unitId,
-        lineH
+        lineH,
+        true,
+        'greedy'
       ).length;
       if (trialLineCache.size > 4096) trialLineCache.clear();
       trialLineCache.set(key, counted);
@@ -1961,6 +1966,7 @@ export class DynamicKneeEngine {
       rulesConfig
     );
     const spaceShaped = shaper.shapeWord(' ');
+    const optimalBreaking = engine.lineBreaking() === 'optimal';
     const lineWords: ShapedWord[] = [];
     let currentWidth = 0;
     let idx = startIndex;
@@ -2022,7 +2028,15 @@ export class DynamicKneeEngine {
 
       const spaceNeeded = lineWords.length > 0 ? unitSpaceWidth : 0;
       if (currentWidth + spaceNeeded + shaped.width > effectiveTargetWidth && lineWords.length > 0) {
-        break;
+        // Layout training T10 — take the word with spaces shrunk ≤ 20%
+        // rather than leave a loose line (spaces over twice natural).
+        const spaces = lineWords.filter(w => w.isSpace).length + 1;
+        const tightFits =
+          currentWidth + spaceNeeded + shaped.width <= effectiveTargetWidth + spaces * unitSpaceWidth * 0.2;
+        const looseIfBreak =
+          spaces > 1 && (effectiveTargetWidth - currentWidth) / (spaces - 1) > unitSpaceWidth;
+        const crossesHeading = prevRealWord && prevRealWord.unitId !== shaped.unitId;
+        if (!(optimalBreaking && tightFits && looseIfBreak && !crossesHeading)) break;
       }
 
       if (lineWords.length > 0) {
@@ -2102,6 +2116,17 @@ export class DynamicKneeEngine {
     const maxAllowedExtraPerGap = shaper.getFontSize() * 1.85;
 
     if (
+      optimalBreaking &&
+      !isLastLine &&
+      !(Boolean(neverJustifyHeadingRule.value) && isHeadingLine) &&
+      spaceCount > 0 &&
+      currentWidth > effectiveTargetWidth
+    ) {
+      // A tightened line (T10): justified with spaces slightly shrunk.
+      isJustified = true;
+      extraSpace = (effectiveTargetWidth - currentWidth) / spaceCount;
+      currentWidth = effectiveTargetWidth;
+    } else if (
       !isLastLine &&
       !(Boolean(neverJustifyHeadingRule.value) && isHeadingLine) &&
       spaceCount > 0 &&
@@ -2180,6 +2205,14 @@ export class DynamicKneeEngine {
         extraSpace = Math.max(0, (effectiveTargetWidth - naturalW) / gaps);
         currentWidth = effectiveTargetWidth;
       }
+    }
+
+    if (optimalBreaking && isJustified && !isLastLine) {
+      // T10 — glyph stretch (≤ 2.5%) before the spaces open wide.
+      const probe = { words: lineWords, targetWidth: effectiveTargetWidth, isJustified, isLastLine, extraSpacePerWord: extraSpace } as unknown as TypesetLine;
+      applyGlyphStretch(probe, unitSpaceWidth);
+      lineWords.splice(0, lineWords.length, ...probe.words);
+      extraSpace = probe.extraSpacePerWord;
     }
 
     return {
