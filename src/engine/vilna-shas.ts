@@ -88,28 +88,10 @@ export function isVersoPage(pageNumber: number, numbering: 'standard' | 'talmud'
 import type { DafFormatMode } from '../types/typesetter';
 import type { FolioNumberingSettings, PageElementsDesignSettings, RunningHeaderSettings } from '../types/design-settings';
 import { resolveLogicalSide } from './vilna-preset';
+import { hebrewNumeralBare } from './hebrew-numerals';
 
 function gematriaBare(num: number): string {
-  const letters: Array<[number, string]> = [
-    [400, 'ת'], [300, 'ש'], [200, 'ר'], [100, 'ק'],
-    [90, 'צ'], [80, 'פ'], [70, 'ע'], [60, 'ס'],
-    [50, 'נ'], [40, 'מ'], [30, 'ל'], [20, 'כ'],
-    [10, 'י'], [9, 'ט'], [8, 'ח'], [7, 'ז'],
-    [6, 'ו'], [5, 'ה'], [4, 'ד'], [3, 'ג'],
-    [2, 'ב'], [1, 'א'],
-  ];
-  const nSafe = Math.max(1, Math.floor(num));
-  if (nSafe === 15) return 'טו';
-  if (nSafe === 16) return 'טז';
-  let n = nSafe;
-  let res = '';
-  for (const [val, ch] of letters) {
-    while (n >= val) {
-      res += ch;
-      n -= val;
-    }
-  }
-  return res || 'א';
+  return hebrewNumeralBare(Math.max(1, Math.floor(num))) || 'א';
 }
 
 function gematriaWithPunct(num: number): string {

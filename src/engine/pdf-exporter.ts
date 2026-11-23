@@ -61,6 +61,7 @@ import type {
   RunningHeaderAlignment,
 } from '../types/design-settings';
 import { resolveRunningHeader } from '../types/design-settings';
+import { hebrewNumeral } from './hebrew-numerals';
 
 /**
  * Print-ready PDF options (v0.3.0, module B). All fields optional; defaults
@@ -312,33 +313,7 @@ export class PdfExporter {
    * e.g., 1 -> א׳, 2 -> ב׳, 15 -> ט״ו, 16 -> ט״ז, 50 -> נ׳
    */
   public static toHebrewGematria(num: number): string {
-    const letters: [number, string][] = [
-      [400, 'ת'], [300, 'ש'], [200, 'ר'], [100, 'ק'],
-      [90, 'צ'], [80, 'פ'], [70, 'ע'], [60, 'ס'],
-      [50, 'נ'], [40, 'מ'], [30, 'ל'], [20, 'כ'],
-      [10, 'י'], [9, 'ט'], [8, 'ח'], [7, 'ז'],
-      [6, 'ו'], [5, 'ה'], [4, 'ד'], [3, 'ג'],
-      [2, 'ב'], [1, 'א'],
-    ];
-
-    if (num === 15) return 'ט״ו';
-    if (num === 16) return 'ט״ז';
-
-    let n = num;
-    let res = '';
-    for (const [val, char] of letters) {
-      while (n >= val) {
-        res += char;
-        n -= val;
-      }
-    }
-
-    if (res.length > 1) {
-      return res.slice(0, -1) + '״' + res.slice(-1);
-    } else if (res.length === 1) {
-      return res + '׳';
-    }
-    return 'א׳';
+    return hebrewNumeral(num) || 'א׳';
   }
 
   /**

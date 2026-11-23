@@ -39,6 +39,7 @@ import type { ProfessionalDesignSettings } from '../types/design-settings';
 import type { TypesettingRulesConfig } from './typesetting-rules-engine';
 import { TypesetterEngine } from './typesetter-core';
 import { detectCommentator } from './auto-layout';
+import { hebrewNumeralBare } from './hebrew-numerals';
 
 /** Fitted proportions (from the user's Chumash photos: line pitch ratios). */
 export const MG_FIT = {
@@ -246,14 +247,7 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   const titleSize = (b: Band) => b.sizePt + 1.5;
 
   // Pasuk numbers (Hebrew letters) run in before each pasuk.
-  const pasukLabel = (i: number): string => {
-    const n = i + 1;
-    const ones = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
-    const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
-    if (n === 15) return 'טו';
-    if (n === 16) return 'טז';
-    return (n >= 100 ? 'ק' : '') + tens[Math.floor((n % 100) / 10)] + ones[n % 10];
-  };
+  const pasukLabel = (i: number): string => hebrewNumeralBare(i + 1);
 
   interface Measured {
     pasukLines: TypesetLine[];

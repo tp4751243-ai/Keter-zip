@@ -9,6 +9,9 @@ import { formatBodyFolioLabel } from '../../src/engine/vilna-shas';
 import { textBlockLeft, textBlockRight } from '../../src/types/typesetter';
 import { computeSpineWidthMm, printPageCount } from '../../src/engine/book-production';
 import { fontLacksTeamim, wordHasTeamim } from '../../src/engine/font-analyzer';
+import { hebrewNumeral } from '../../src/engine/hebrew-numerals';
+import { hebrewLetterNumber } from '../../src/engine/layout-extras';
+import { PdfExporter } from '../../src/engine/pdf-exporter';
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = '') => {
@@ -55,6 +58,14 @@ check('בְּרֵאשִׁ֖ית has teamim', wordHasTeamim('בְּרֵאשִׁ֖
 check('בְּרֵאשִׁית (nikkud only) has no teamim', !wordHasTeamim('בְּרֵאשִׁית'));
 check('Frank Ruhl Libre lacks teamim (measured)', fontLacksTeamim('Frank Ruhl Libre'));
 check('Noto Serif Hebrew has teamim (measured)', !fontLacksTeamim('Noto Serif Hebrew'));
+
+// Hebrew numerals: one implementation, customary forms.
+check('paseq ׀ uses the teamim font', wordHasTeamim('׀'));
+for (const [n, want] of [[1, 'א׳'], [15, 'ט״ו'], [16, 'ט״ז'], [115, 'קט״ו'], [116, 'קט״ז'], [270, 'ע״ר'], [272, 'ער״ב'], [275, 'ער״ה'],
+  [298, 'רח״צ'], [304, 'ד״ש'], [344, 'שד״מ'], [500, 'ת״ק'], [704, 'תש״ד'], [744, 'תשד״מ'], [1001, 'א׳א']] as const) {
+  check(`gematria ${n} = ${want}`, hebrewNumeral(n) === want, hebrewNumeral(n));
+}
+check('folio, daf and paragraph numbers agree (115)', PdfExporter.toHebrewGematria(115) === 'קט״ו' && hebrewLetterNumber(115) === 'קטו');
 
 console.log(fails ? `${fails} FAILED` : 'all book rules pass');
 process.exit(fails ? 1 : 0);

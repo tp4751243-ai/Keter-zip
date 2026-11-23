@@ -15,6 +15,7 @@
  */
 
 import { ContentUnit } from '../types/typesetter';
+import { hebrewNumeralBare } from './hebrew-numerals';
 
 /* ------------------------------------------------------------------ */
 /* 1. Side-by-side paragraph groups                                    */
@@ -148,9 +149,6 @@ export interface ParagraphNumberingResult {
   byUnitId: Map<string, NumberedParagraph>;
 }
 
-const HEBREW_ONES = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
-const HEBREW_TENS = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
-const HEBREW_HUNDREDS = ['', 'ק', 'ר', 'ש', 'ת'];
 
 /**
  * Converts a positive integer to Hebrew-letter numerals (gematria style):
@@ -158,27 +156,7 @@ const HEBREW_HUNDREDS = ['', 'ק', 'ר', 'ש', 'ת'];
  * 20→כ, 100→ק, 400→ת, 500→תק, … Supports up to 999.
  */
 export function hebrewLetterNumber(n: number): string {
-  if (!Number.isFinite(n) || n < 1) return '';
-  const hundreds = Math.floor(n / 100);
-  const rem = n % 100;
-  let out = '';
-  if (hundreds > 0) {
-    // 400 = ת; 500–900 are written ת + ק/ר/ש/ת (תק, תר, תש, תת).
-    if (hundreds <= 4) {
-      out += HEBREW_HUNDREDS[hundreds];
-    } else {
-      out += 'ת' + HEBREW_HUNDREDS[hundreds - 4];
-    }
-  }
-  // 15 → טו and 16 → טז, also inside larger numbers (115 → קטו, 216 → רטז):
-  // the traditional avoidance of יה/יו applies to the tens+ones part.
-  if (rem === 15) return out + 'טו';
-  if (rem === 16) return out + 'טז';
-  const tens = Math.floor(rem / 10);
-  const ones = rem % 10;
-  if (tens > 0) out += HEBREW_TENS[tens];
-  if (ones > 0) out += HEBREW_ONES[ones];
-  return out;
+  return hebrewNumeralBare(n);
 }
 
 /** Roles that receive a paragraph number in the main sequence. */
