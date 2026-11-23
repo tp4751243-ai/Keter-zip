@@ -2516,6 +2516,7 @@ export const DesignTypesettingPanel: React.FC<DesignTypesettingPanelProps> = ({
                     </label>
                     {(designSettings.pageElements.runningHeader?.useStructuredVilnaHeader ?? false) && (
                       <div className="space-y-1.5 ps-1">
+                        <Hint>{t("שדות ריקים = אוטומטי: שם הפרק ומספרו מזוהים מהטקסט בכל עמוד (כולל הדרן עלך), שם המסכת מכותרת \"מסכת …\", ומספר הדף בצד החיצוני.")}</Hint>
                         <div>
                           <label className="block text-[10px] font-semibold text-[var(--ui-text-secondary)] mb-0.5">
                             {t("שם המסכת / הספר בכותרת:")}

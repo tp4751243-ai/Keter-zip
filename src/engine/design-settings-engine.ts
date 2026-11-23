@@ -1942,6 +1942,8 @@ export interface AiDesignCommandResult {
   requiresPreviewConfirmation: boolean;
 }
 
+import { VILNA_FIT, vilnaSizesFor } from './vilna-fit';
+
 export class DesignSettingsEngine {
   /**
    * Rebuilds the derived `roleStyles`, `layout`, `localUnitOverrides`, and `localWordOverrides`
@@ -2406,7 +2408,22 @@ export class DesignSettingsEngine {
     customLayout?: CustomLayoutDesign;
   }): ProfessionalDesignSettings {
     const layoutType = options?.layoutType ?? 'rav_text';
-    const geo = options?.geometry ?? {
+    // Layout training T2.5 — a Talmud folio defaults to the real Vilna
+    // page (240 × 340 mm, margins 12/10/12/12 mm, as in VILNA_SHAS_PRESET).
+    // On the old 482 × 680 pt page the text block is only ≈ 27 Gemara ems
+    // wide against ≈ 40 measured on Vilna pages, so the commentaries had
+    // no room and the harness counted 3–8× the Vilna page count.
+    const MM = 72 / 25.4;
+    const vilnaFolio: PageGeometry = {
+      pageWidth: 240 * MM,
+      pageHeight: 340 * MM,
+      marginTop: 12 * MM,
+      marginBottom: 12 * MM,
+      marginInside: 12 * MM,
+      marginOutside: 10 * MM,
+      isVerso: false,
+    };
+    const geo = options?.geometry ?? (layoutType === 'rav_text' ? vilnaFolio : {
       pageWidth: 482.0,
       pageHeight: 680.0,
       marginTop: 48.0,
@@ -2414,7 +2431,7 @@ export class DesignSettingsEngine {
       marginInside: 46.0,
       marginOutside: 42.0,
       isVerso: false,
-    };
+    });
     const knee = options?.kneeSettings ?? {
       mode: 'auto',
       upperKneeLines: 4,
@@ -2427,9 +2444,13 @@ export class DesignSettingsEngine {
     const sourceFontFamily = options?.sourceFontFamily ?? 'Frank Ruhl Libre';
     const rashiFontFamily = options?.rashiFontFamily ?? 'Noto Rashi Hebrew';
     const tosafotFontFamily = options?.tosafotFontFamily ?? 'Frank Ruhl Libre';
+    // Layout training T2.5 — a Talmud folio's sizes come from the fitted
+    // Vilna proportions for its own text block (vilna-fit.ts).
+    const vilnaSizes =
+      layoutType === 'rav_text' ? vilnaSizesFor(geo.pageWidth - geo.marginInside - geo.marginOutside) : null;
     const sourceFontSizePt =
-      options?.sourceFontSizePt ?? (layoutType === 'mikraot_gedolot' ? 16.0 : 14.5);
-    const commentaryFontSizePt = options?.commentaryFontSizePt ?? 10.5;
+      options?.sourceFontSizePt ?? vilnaSizes?.gemaraPt ?? (layoutType === 'mikraot_gedolot' ? 16.0 : 14.5);
+    const commentaryFontSizePt = options?.commentaryFontSizePt ?? vilnaSizes?.commentaryPt ?? 10.5;
 
     const pageLayout: PageLayoutDesignSettings = {
       layoutType,
@@ -2580,7 +2601,23 @@ export class DesignSettingsEngine {
       titlePage: JSON.parse(JSON.stringify(DEFAULT_TITLE_PAGE_SETTINGS)),
     };
 
-    return this.syncDerivedViews(base);
+    let synced = this.syncDerivedViews(base);
+    // Layout training T2.5 — fitted Vilna line spacing for a Talmud folio.
+    if (vilnaSizes) {
+      for (const [role, size] of [
+        ['main_source', vilnaSizes.gemaraPt],
+        ['primary_comment', vilnaSizes.commentaryPt],
+        ['secondary_comment', vilnaSizes.commentaryPt],
+      ] as const) {
+        synced = this.updateRoleParagraphStyle(
+          synced,
+          role,
+          { lineSpacingRatio: VILNA_FIT.lineSpacing, leadingPt: Math.round(size * VILNA_FIT.lineSpacing * 100) / 100 },
+          'user'
+        );
+      }
+    }
+    return synced;
   }
 
   /**

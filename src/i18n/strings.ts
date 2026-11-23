@@ -1844,6 +1844,9 @@ export const EN_STRINGS: Record<string, string> = {
 "למשל: באדיבות הספרייה הדיגיטלית": "e.g. Courtesy of the digital library",
 "למשל: ספר קודש": "e.g. Sefer Kodesh",
 
+  // Layout training T2 (Vilna header / frame / margins)
+  'שדות ריקים = אוטומטי: שם הפרק ומספרו מזוהים מהטקסט בכל עמוד (כולל הדרן עלך), שם המסכת מכותרת "מסכת …", ומספר הדף בצד החיצוני.':
+    'Leave empty for automatic: the perek name and number are detected from the text on each page (including הדרן עלך), the masechta from a "מסכת …" heading, and the daf number goes on the outer corner.',
 };
 
 /**

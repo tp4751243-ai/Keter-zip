@@ -694,7 +694,7 @@ export class PaginationEngine {
     const runningHeaderCfg = designSettings?.pageElements?.runningHeader;
     const vilnaHeaderOn = runningHeaderCfg?.useStructuredVilnaHeader === true;
     const perakim = vilnaHeaderOn ? derivePerakim(units) : new Map<string, PerekInfo>();
-    const vilnaMasechet = vilnaHeaderOn ? resolveMasechetName(runningHeaderCfg, title) : '';
+    const vilnaMasechet = vilnaHeaderOn ? resolveMasechetName(runningHeaderCfg, title, units) : '';
     const vilnaHeaderSize =
       runningHeaderCfg?.vilnaHeaderFontSizePt ?? Math.round(effectiveSourceFontSize * 1.6 * 10) / 10;
     const vilnaHeaderFont =
@@ -4542,6 +4542,94 @@ export class PaginationEngine {
           rTarget = Math.min(remRashi, pacedR);
         } else {
           rTarget = Math.min(remRashi, Math.max(rTarget, 240));
+        }
+      }
+
+      // Layout training T2.5 — MEASURED page planner. The legacy planner
+      // above picks each page's take with fixed word counts (240 source,
+      // 520 Tosafot, 435 words/page …) tuned to one fixture; on other
+      // books and type sizes the harness measured pages 9–60% full and
+      // commentary-only pages. This planner asks the real knee solver:
+      // the page takes the LARGEST run of whole linked groups (or safe
+      // intermediate points) whose Gemara AND due Rashi/Tosafot all fit.
+      // If even the first group's commentary does not fit, the page takes
+      // that group anyway (its commentary continues overleaf), so every
+      // page carries Gemara while Gemara remains — never a commentary-only
+      // page. 'legacy' keeps the old behaviour.
+      if (designSettings?.ravText?.pagePlanner !== 'legacy' && sCursor < sourceShapedAll.length) {
+        const probe = (sN: number, rN: number, tN: number) => {
+          const ps = sourceShapedAll.slice(sCursor, sCursor + sN);
+          const pr = rashiShapedAll.slice(rCursor, rCursor + rN);
+          const pt = tosafotShapedAll.slice(tCursor, tCursor + tN);
+          return DynamicKneeEngine.layoutRavTextPage({
+            sourceText: ps.map(w => w.text).join(' '),
+            rashiText: pr.map(w => w.text).join(' '),
+            tosafotText: pt.map(w => w.text).join(' '),
+            sourceShapedWords: ps,
+            rashiShapedWords: pr,
+            tosafotShapedWords: pt,
+            sourceTopReservePt: openingReserveFor(p),
+            sourceUnitId: ps[0]?.unitId ?? `src-p${p}`,
+            rashiUnitId: pr[0]?.unitId ?? `rashi-p${p}`,
+            tosafotUnitId: pt[0]?.unitId ?? `tosafot-p${p}`,
+            geometry: effectiveGeometry,
+            sourceFontSize,
+            commentaryFontSize,
+            upperKneeLines: kneeSettings.upperKneeLines ?? 4,
+            upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
+            forceSteppedKnee: true,
+            mirrorFlanks: p % 2 === 1,
+            manualJunctionPercent: kneeSettings.mode === 'manual' ? kneeSettings.junctionPercent : undefined,
+            manualLowerWidthPercent: kneeSettings.mode === 'manual' ? kneeSettings.lowerWidthPercent : undefined,
+            manualStepDirection: kneeSettings.mode === 'manual' ? kneeSettings.stepDirection : 'auto',
+            isMultiPageContinuation: true,
+            rulesConfig,
+            designSettings,
+          });
+        };
+        const seen = new Set<number>();
+        const cands = groupBoundaries
+          .filter(b => b.sEnd > sCursor)
+          .map(b => ({
+            s: b.sEnd - sCursor,
+            r: Math.max(0, b.rEnd - rCursor),
+            t: Math.max(0, b.tEnd - tCursor),
+          }))
+          .filter(c => (seen.has(c.s) ? false : (seen.add(c.s), true)))
+          .sort((a, b) => a.s - b.s);
+        if (cands.length > 0) {
+          let lo = 0;
+          let hi = cands.length - 1;
+          let best = -1;
+          let probes = 0;
+          while (lo <= hi && probes < 14) {
+            const mid = (lo + hi) >> 1;
+            const c = cands[mid];
+            const pr = probe(c.s, c.r, c.t);
+            probes++;
+            const fits =
+              pr.consumedSourceWords >= c.s && pr.consumedRashiWords >= c.r && pr.consumedTosafotWords >= c.t;
+            if (fits) {
+              best = mid;
+              lo = mid + 1;
+            } else {
+              hi = mid - 1;
+            }
+          }
+          // Fill to the last line: after the largest run that fits whole,
+          // offer the NEXT group too; the solver takes the part of it that
+          // fits (a Vilna page breaks mid-sentence at its foot), and the
+          // rest continues overleaf with its commentary.
+          const chosen = best >= 0 && best + 1 < cands.length ? cands[best + 1] : cands[Math.max(0, best)];
+          sTarget = chosen.s;
+          rTarget = chosen.r;
+          tTarget = chosen.t;
+          candidateBreakChosen = true;
+          lookAheadCandidatesTested = probes;
+          linkDecisionMsg =
+            best >= 0
+              ? `תכנון עמוד מדוד: ${best + 1} קטעי גמרא עם כל המפרשים שלהם נכנסים בעמוד ${p + 2}.`
+              : `תכנון עמוד מדוד: המפרשים של הקטע הראשון ארוכים מעמוד — הם ממשיכים בעמוד הבא, והגמרא ממשיכה בכל עמוד.`;
         }
       }
 

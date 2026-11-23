@@ -190,6 +190,35 @@ function settingsFor(profile: string): { settings: ProfessionalDesignSettings; l
   return { settings: base, layoutType: 'rav_text' };
 }
 
+/**
+ * Training knobs (--tune k=v,…): the proportions the fit script searches.
+ *  em    — text-block width in Gemara ems (Vilna measured ≈ 40)
+ *  lead  — line spacing ratio of Gemara and commentaries
+ *  com   — commentary size ÷ Gemara size (Vilna measured 0.82)
+ */
+function applyTune(settings: ProfessionalDesignSettings, tune: Record<string, number>): ProfessionalDesignSettings {
+  let s = settings;
+  const g = s.pageLayout.geometry;
+  const contentW = g.pageWidth - g.marginInside - g.marginOutside;
+  const gem = tune.em ? Math.round((contentW / tune.em) * 10) / 10 : s.roleStyles.main_source.character.fontSizePt;
+  const com = Math.round(gem * (tune.com ?? s.roleStyles.primary_comment.character.fontSizePt / s.roleStyles.main_source.character.fontSizePt) * 10) / 10;
+  const set = (role: 'main_source' | 'primary_comment' | 'secondary_comment', size: number) => {
+    s = DesignSettingsEngine.updateRoleCharacterStyle(s, role, { fontSizePt: size }, 'ai');
+    if (tune.lead) {
+      s = DesignSettingsEngine.updateRoleParagraphStyle(
+        s,
+        role,
+        { lineSpacingRatio: tune.lead, leadingPt: Math.round(size * tune.lead * 100) / 100 },
+        'ai'
+      );
+    }
+  };
+  set('main_source', gem);
+  set('primary_comment', com);
+  set('secondary_comment', com);
+  return s;
+}
+
 // ── Scoring ───────────────────────────────────────────────────────────
 type Status = 'pass' | 'fail' | 'info';
 interface Check {
@@ -365,15 +394,16 @@ function scorePage(
     value: markers.length + literal,
   });
 
-  // L1 — Gemara : commentary size ratio (Vilna ≈ 1.25–1.45).
+  // L1 — commentary ÷ Gemara size: measured 0.818 (median of 8 Vilna
+  // reference PDFs, training/vilna/reference-measurements.json); ±0.06.
   const gSize = median(plan.lines.filter(l => isSource(l.role)).map(l => l.fontSizePt));
   const cSize = median(plan.lines.filter(l => isRashi(l.role) || isTosafot(l.role)).map(l => l.fontSizePt));
-  const ratio = cSize ? gSize / cSize : 0;
+  const ratio = gSize ? cSize / gSize : 0;
   out.push({
     id: 'L1',
-    label: 'Gemara/commentary size ratio 1.25–1.45',
-    status: ratio >= 1.25 && ratio <= 1.45 ? 'pass' : 'fail',
-    detail: `${gSize}pt / ${cSize}pt = ${ratio.toFixed(2)}`,
+    label: 'Commentary/Gemara size ratio 0.76–0.88 (Vilna 0.82)',
+    status: gSize && cSize ? (ratio >= 0.76 && ratio <= 0.88 ? 'pass' : 'fail') : 'info',
+    detail: gSize && cSize ? `${cSize}pt / ${gSize}pt = ${ratio.toFixed(2)}` : 'no Gemara or no commentary on this page',
     value: ratio,
   });
 
@@ -458,6 +488,12 @@ async function main() {
   const refDir = flag('--ref');
   const minScore = flag('--min-score') ? Number(flag('--min-score')) : undefined;
   const profiles = profileArg === 'all' ? ['recipe', 'rav_text'] : [profileArg];
+  const tune: Record<string, number> = {};
+  for (const kv of (flag('--tune') ?? '').split(',').filter(Boolean)) {
+    const [k, v] = kv.split('=');
+    tune[k] = Number(v);
+  }
+  const jsonOnly = args.includes('--json');
 
   const corpusPath = path.resolve('training', 'vilna', tractate, 'corpus.json');
   const corpus: Corpus = JSON.parse(fs.readFileSync(corpusPath, 'utf8'));
@@ -465,7 +501,9 @@ async function main() {
 
   const summary: Array<{ profile: string; score: number; pages: number }> = [];
   for (const profile of profiles) {
-    const { settings, layoutType } = settingsFor(profile);
+    const prof = settingsFor(profile);
+    const layoutType = prof.layoutType;
+    const settings = Object.keys(tune).length ? applyTune(prof.settings, tune) : prof.settings;
     const geometry = settings.pageLayout.geometry;
     const origLog = console.log;
     console.log = (...a: unknown[]) => {
@@ -564,6 +602,23 @@ async function main() {
     }
     fs.writeFileSync(path.join(outDir, 'scorecard.md'), md.join('\n'));
     fs.writeFileSync(path.join(outDir, 'scorecard.json'), JSON.stringify({ tractate, profile, layoutType, score, report }, null, 1));
+    if (jsonOnly) {
+      const fills = report.flatMap(r => r.checks).filter(c2 => c2.id === 'P1' && c2.status !== 'info').map(c2 => c2.value ?? 0);
+      const gaps = report.flatMap(r => r.checks).filter(c2 => c2.id === 'L2' && typeof c2.value === 'number').map(c2 => c2.value ?? 0);
+      console.log(
+        'SUMMARY ' +
+          JSON.stringify({
+            profile,
+            tune,
+            pages: pages.length,
+            score,
+            fillMean: fills.length ? +(fills.reduce((a2, b2) => a2 + b2, 0) / fills.length).toFixed(3) : 1,
+            gapP95: gaps.length ? +Math.max(...gaps).toFixed(2) : 0,
+            gemaraPt: settings.roleStyles.main_source.character.fontSizePt,
+          })
+      );
+      continue;
+    }
     console.log(`\n=== ${profile} (${layoutType}) — ${pages.length} pages — score ${score}% ===`);
     for (const id of ruleIds) {
       const all = report.flatMap(r => r.checks.filter(c2 => c2.id === id));

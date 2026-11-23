@@ -221,11 +221,27 @@ export function layoutVilnaHeader(page: PageTypesetResult, perek: PerekInfo | un
   };
 }
 
-/** Masechta name for the head: the explicit setting, else the title without "מסכת". */
-export function resolveMasechetName(rh: Partial<RunningHeaderSettings> | undefined | null, title: string): string {
+/**
+ * Masechta name for the head: the explicit setting; else a "מסכת X"
+ * heading in the text (e.g. "מסכת ברכות — פרק ראשון"); else a title that
+ * names the masechta ("מסכת ברכות" → ברכות); else the title as is.
+ */
+export function resolveMasechetName(
+  rh: Partial<RunningHeaderSettings> | undefined | null,
+  title: string,
+  units: ContentUnit[] = []
+): string {
   const explicit = (rh?.masechetName ?? '').trim();
   if (explicit) return explicit;
-  return title.replace(/^\s*מסכת\s+/, '').trim();
+  const strip = (t: string) => t.replace(/[\u0591-\u05C7]/g, '');
+  for (const u of units) {
+    if (u.role !== 'chapter' && u.role !== 'heading' && u.role !== 'main_title' && u.role !== 'subtitle') continue;
+    const m = /מסכת\s+([^\s:—–\-,.]+(?:\s+(?:קמא|מציעא|בתרא|שני|ראשון))?)/.exec(strip(u.rawText));
+    if (m) return m[1];
+  }
+  const t = /מסכת\s+(.+)/.exec(strip(title));
+  if (t) return t[1].trim();
+  return title.trim();
 }
 
 /** Default head size: a little larger than the Gemara (Vilna ≈ 1.3×). */

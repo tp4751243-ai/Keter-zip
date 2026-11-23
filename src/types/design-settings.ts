@@ -923,6 +923,12 @@ export interface RavTextDesignSettings {
    * disabled; off = the legacy full-width band below the knee.
    */
   marginalColumns?: { enabled: boolean };
+  /**
+   * Layout training T2.5 — rav-text page planner. 'measured' (default):
+   * each page takes the largest run of Gemara whose commentaries fit,
+   * verified by the knee solver. 'legacy': the fixed word-count planner.
+   */
+  pagePlanner?: 'measured' | 'legacy';
   sourceFontFamily: string;
   rashiFontFamily: string;
   tosafotFontFamily: string;

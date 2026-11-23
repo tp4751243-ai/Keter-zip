@@ -55,6 +55,7 @@
 import type { ContentRole, ContentUnit, PageTypesetResult, RavTextLink, TierConfig } from '../types/typesetter';
 import type { CustomLayoutBox, ProfessionalDesignSettings } from '../types/design-settings';
 import { DesignSettingsEngine } from './design-settings-engine';
+import { VILNA_FIT, vilnaSizesFor } from './vilna-fit';
 import { DEFAULT_OPENING_DECORATION, DEFAULT_RUNNING_HEADER_SETTINGS } from '../types/design-settings';
 import type { LocalRuleOverride } from './typesetting-rules-engine';
 
@@ -822,9 +823,35 @@ export function fixShasFlaws(
  *   on the SECOND and later rows of Gemara paragraphs;
  * - dibbur hamatchil bold.
  */
+/**
+ * Layout training T2.5 — set Gemara / Rashi / Tosafot sizes and line
+ * spacing from the FITTED Vilna proportions (vilna-fit.ts) for the
+ * book's own text block, so any page size gets Vilna density.
+ */
+export function applyVilnaProportions(settings: ProfessionalDesignSettings): ProfessionalDesignSettings {
+  const g = settings.pageLayout.geometry;
+  const { gemaraPt, commentaryPt } = vilnaSizesFor(g.pageWidth - g.marginInside - g.marginOutside);
+  let next = settings;
+  const roles: Array<['main_source' | 'primary_comment' | 'secondary_comment', number]> = [
+    ['main_source', gemaraPt],
+    ['primary_comment', commentaryPt],
+    ['secondary_comment', commentaryPt],
+  ];
+  for (const [role, size] of roles) {
+    next = DesignSettingsEngine.updateRoleCharacterStyle(next, role, { fontSizePt: size }, 'user');
+    next = DesignSettingsEngine.updateRoleParagraphStyle(
+      next,
+      role,
+      { lineSpacingRatio: VILNA_FIT.lineSpacing, leadingPt: Math.round(size * VILNA_FIT.lineSpacing * 100) / 100 },
+      'user'
+    );
+  }
+  return next;
+}
+
 export function applyVilnaShasDefaults(settings: ProfessionalDesignSettings): ProfessionalDesignSettings {
   let next = DesignSettingsEngine.updateRoleStyle(
-    settings,
+    applyVilnaProportions(settings),
     'chapter',
     { paragraph: { alignment: 'center' } },
     'user',
