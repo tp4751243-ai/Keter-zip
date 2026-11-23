@@ -79,6 +79,7 @@ import {
 import { CustomLayoutBox, SemanticStyleRole } from '../types/design-settings';
 import { detectYiddish } from './yiddish-sefarim';
 import { extractOpeningWord, openingFrameGeometry } from './vilna-opening-frame';
+import { isTalmudFolio } from './sefer-type';
 import {
   marginalColumnGeometry,
   planMarginalItems,
@@ -247,7 +248,10 @@ export class PaginationEngine {
       ...(input.designSettings?.ravText?.openingDecoration ?? {}),
     };
     const openingExtract =
-      layoutType === 'rav_text' && openingCfgEarly.enabled && openingCfgEarly.styleId !== 'none'
+      layoutType === 'rav_text' &&
+      isTalmudFolio(input.designSettings, layoutType) &&
+      openingCfgEarly.enabled &&
+      openingCfgEarly.styleId !== 'none'
         ? extractOpeningWord(rawUnits ?? [], openingCfgEarly.wordCount ?? 1)
         : null;
     const units: ContentUnit[] = openingExtract?.units ?? rawUnits ?? [];
@@ -692,7 +696,10 @@ export class PaginationEngine {
     // masechta, folio on the outer corner). Opt-in per book through
     // runningHeader.useStructuredVilnaHeader; the Vilna presets turn it on.
     const runningHeaderCfg = designSettings?.pageElements?.runningHeader;
-    const vilnaHeaderOn = runningHeaderCfg?.useStructuredVilnaHeader === true;
+    // Layout training T5 — Talmud-only features check the sefer type
+    // themselves, so no setting left over from another type can leak.
+    const talmudFolio = isTalmudFolio(designSettings, layoutType);
+    const vilnaHeaderOn = talmudFolio && runningHeaderCfg?.useStructuredVilnaHeader === true;
     const perakim = vilnaHeaderOn ? derivePerakim(units) : new Map<string, PerekInfo>();
     const vilnaMasechet = vilnaHeaderOn ? resolveMasechetName(runningHeaderCfg, title, units) : '';
     const vilnaHeaderSize =
@@ -718,7 +725,7 @@ export class PaginationEngine {
           isVerso: bIdx % 2 === 1,
           textLeftPt: mirrorOn && bIdx % 2 === 0 ? pg.geometry.marginOutside : pg.geometry.marginInside,
         };
-        const folioInfo = formatBodyFolioLabel(bIdx, layoutType, designSettings?.pageElements);
+        const folioInfo = formatBodyFolioLabel(bIdx, layoutType, designSettings?.pageElements, talmudFolio);
         pg.folioDisplay = folioInfo.folioDisplay;
         pg.pageNumberHebrew = folioInfo.folioDisplay;
         const spreadSide = spreadSideForPageIndex(bIdx);
@@ -751,7 +758,7 @@ export class PaginationEngine {
         }
 
         // Verified Mishnah -> Gemara boundary transition marker (`גמ׳`) without mutating rawText
-        if (transCfg.enabled && pg.sourceLines.length > 0) {
+        if (talmudFolio && transCfg.enabled && pg.sourceLines.length > 0) {
           const markers: TransitionMarkerGeom[] = [];
           for (const sl of pg.sourceLines) {
             if (!sl.unitId || emittedTransitionUnits.has(sl.unitId)) continue;
@@ -871,7 +878,7 @@ export class PaginationEngine {
             };
           }
         }
-        if ((bIdx === 0 || isChapterStartPage) && openCfg.enabled && openCfg.styleId !== 'none' && !pg.openingWordBox && pg.sourceLines.length > 0) {
+        if (talmudFolio && (bIdx === 0 || isChapterStartPage) && openCfg.enabled && openCfg.styleId !== 'none' && !pg.openingWordBox && pg.sourceLines.length > 0) {
           if (isChapterStartPage && firstSourceUnitId) emittedChapterStartUnitIds.add(firstSourceUnitId);
           const anchorLine =
             (isChapterStartPage
@@ -3895,7 +3902,8 @@ export class PaginationEngine {
     // solved in the width left between them (a symmetric carve, so the
     // knee's own inner/outer mirroring is untouched) and its lines are
     // shifted back by `marginDx`; pages keep the full geometry.
-    const marginalOn = designSettings?.ravText?.marginalColumns?.enabled !== false;
+    const ravTalmud = isTalmudFolio(designSettings, layoutType);
+    const marginalOn = ravTalmud && designSettings?.ravText?.marginalColumns?.enabled !== false;
     const marginalItems = marginalOn ? planMarginalItems(units) : [];
     const marginalUnitIds = new Set(marginalItems.map(i => i.unitId));
     const pageGeometry = geometry;
@@ -4138,10 +4146,10 @@ export class PaginationEngine {
         ...DEFAULT_OPENING_DECORATION,
         ...(designSettings?.ravText?.openingDecoration ?? {}),
       };
-      const openingFrameOn = openingCfgRav.enabled && openingCfgRav.styleId !== 'none';
+      const openingFrameOn = ravTalmud && layoutType === 'rav_text' && openingCfgRav.enabled && openingCfgRav.styleId !== 'none';
       const openingFrame = openingFrameOn ? openingFrameGeometry(sourceFontSize) : null;
       const openingReserveFor = (pageIdx: number): number => (pageIdx === 0 && openingFrame ? openingFrame.reservePt : 0);
-      const michtavEnabled = designSettings?.ravText?.michtavEnabled === true && !openingFrameOn;
+      const michtavEnabled = ravTalmud && designSettings?.ravText?.michtavEnabled === true && !openingFrameOn;
 
       let sCursor = 0;
       let rCursor = 0;
@@ -4158,7 +4166,8 @@ export class PaginationEngine {
           p === 0) &&
         p < 500
       ) {
-        const pageNumber = p + 2; // Talmud traditional numbering starts at Daf Bet (ב׳)
+        // Talmud numbering starts at Daf Bet (ב׳); every other sefer at 1.
+        const pageNumber = p + (ravTalmud ? 2 : 1);
 
         const remSource = Math.max(0, sourceShapedAll.length - sCursor);
         const remRashi = Math.max(0, rashiShapedAll.length - rCursor);

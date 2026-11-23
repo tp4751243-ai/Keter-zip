@@ -161,20 +161,28 @@ export function formatTalmudDafLabel(
 export function formatBodyFolioLabel(
   bodyPageIndex: number,
   layoutType: string,
-  pageElements?: Partial<PageElementsDesignSettings> | null
+  pageElements?: Partial<PageElementsDesignSettings> | null,
+  /** Layout training T5 — is the book a Talmud folio (sefer-type.ts)? Defaults to rav_text. */
+  talmudFolio: boolean = layoutType === 'rav_text'
 ): { folioDisplay: string; pageNumberHebrew: string; bodyNumber: number; latin: string } {
-  const fn = pageElements?.folioNumbering;
+  const fn0 = pageElements?.folioNumbering;
+  // Daf / amud formats belong to a Talmud folio only; any other sefer
+  // numbers its pages, whatever a setting left over from a Talmud says.
+  const fn =
+    !talmudFolio && fn0 && (fn0.dafFormat === 'dots' || fn0.dafFormat === 'amud_hebrew')
+      ? { ...fn0, dafFormat: 'gematria' as DafFormatMode, startDaf: 1 }
+      : fn0;
   const pageNumberStyle = pageElements?.pageNumberStyle ?? 'hebrew';
-  if (layoutType === 'rav_text' || fn) {
-    const defaultStartDaf = layoutType === 'rav_text' ? 2 : 1;
+  if (talmudFolio || fn) {
+    const defaultStartDaf = talmudFolio ? 2 : 1;
     const dafFormat: DafFormatMode =
       fn?.dafFormat ??
-      (layoutType === 'rav_text'
+      (talmudFolio
         ? 'dots'
         : pageNumberStyle === 'numbers'
           ? 'numbers'
           : 'gematria');
-    if (layoutType === 'rav_text' || dafFormat === 'dots' || dafFormat === 'amud_hebrew') {
+    if (talmudFolio || dafFormat === 'dots' || dafFormat === 'amud_hebrew') {
       const { daf, latin } = computeTalmudDafAmud(
         bodyPageIndex,
         fn?.startDaf ?? defaultStartDaf,

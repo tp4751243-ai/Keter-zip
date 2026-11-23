@@ -1943,6 +1943,7 @@ export interface AiDesignCommandResult {
 }
 
 import { VILNA_FIT, vilnaSizesFor } from './vilna-fit';
+import { applySeferTypeRulesInPlace, seferTypeForLayout, type SeferType } from './sefer-type';
 
 export class DesignSettingsEngine {
   /**
@@ -2601,6 +2602,8 @@ export class DesignSettingsEngine {
       titlePage: JSON.parse(JSON.stringify(DEFAULT_TITLE_PAGE_SETTINGS)),
     };
 
+    // Layout training T5 — a new book starts with exactly its type's rules.
+    applySeferTypeRulesInPlace(base, seferTypeForLayout(layoutType));
     let synced = this.syncDerivedViews(base);
     // Layout training T2.5 — fitted Vilna line spacing for a Talmud folio.
     if (vilnaSizes) {
@@ -3986,6 +3989,15 @@ export class DesignSettingsEngine {
     return this.resetRoleStyleToGlobal(current, role as ContentRole, false);
   }
 
+  /** Layout training T5 — apply a sefer type's rules (see engine/sefer-type.ts). */
+  public static applySeferType(current: ProfessionalDesignSettings, type: SeferType): ProfessionalDesignSettings {
+    const next = this.cloneSettings(current);
+    applySeferTypeRulesInPlace(next, type);
+    next.version += 1;
+    next.updatedAt = Date.now();
+    return this.syncDerivedViews(next);
+  }
+
   public static updateLayoutSettings(
     current: ProfessionalDesignSettings,
     patch: { layoutType?: BookLayoutType; geometry?: Partial<PageGeometry> },
@@ -4005,6 +4017,13 @@ export class DesignSettingsEngine {
       // transactional switch in layout-transaction.ts records this.
       // (A ready design applied afterwards replaces them with its own.)
       next.pageLayout.tiers = this.defaultTiersForLayout(patch.layoutType);
+      // Layout training T5 — a new layout is a new kind of sefer: switch
+      // the old type's rules off and this type's on (a ready design
+      // applied afterwards re-applies its own, more specific type).
+      // custom_layout keeps the current type (boxes over the same sefer).
+      if (patch.layoutType !== 'custom_layout') {
+        applySeferTypeRulesInPlace(next, seferTypeForLayout(patch.layoutType));
+      }
     }
     if (patch.geometry) {
       if (patch.geometry.pageWidth !== undefined) next.pageLayout.pageWidthPt = patch.geometry.pageWidth;

@@ -70,6 +70,7 @@ import {
   type DocumentClassification as HistoricalDocumentClassification,
   type RecipeSuggestion as HistoricalRecipeSuggestion,
 } from './historical-layouts';
+import { seferTypeForRecipe } from './sefer-type';
 import { applyGenreTypography, applyRecipeToSettings as applyRecipeToSettingsEngine } from './layout-recipes';
 import type { LayoutRecipe } from './layout-recipes';
 import { applyVilnaShasDefaults, classifyShasParagraph, normalizeHebrewForMatch } from './vilna-shas';
@@ -570,6 +571,9 @@ export function applyRecipeToSettingsById(
   if (VILNA_KNEE_RECIPES.has(resolvedId)) {
     next = DesignSettingsEngine.updateLayoutSettings(next, { layoutType: 'rav_text' }, 'ai');
   }
+  // Layout training T5 — the design's own sefer type decides which
+  // type-specific rules are on (a Chumash recipe never keeps Gemara rules).
+  next = DesignSettingsEngine.applySeferType(next, seferTypeForRecipe(resolvedId, recipe.baseLayout ?? 'single_column'));
   return next;
 }
 

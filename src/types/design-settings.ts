@@ -204,6 +204,13 @@ export interface RoleDesignStyle {
 export interface PageLayoutDesignSettings {
   layoutType: BookLayoutType;
   geometry: PageGeometry;
+  /**
+   * Layout training T5 — the kind of sefer (engine/sefer-type.ts). Decides
+   * which type-specific rules apply (daf folios, Vilna head, masechta
+   * frame, גמ׳ marker, marginal apparatus are Talmud only). Unset on a
+   * project saved before types existed: then rav_text counts as Talmud.
+   */
+  seferType?: 'talmud' | 'chumash' | 'mishnah' | 'halacha' | 'siddur' | 'yiddish' | 'prose';
   // --- v0.5.0 Part C — Module 3 (Custom Layout Designer) -------------------
   // Present only when `layoutType === 'custom_layout'` (or when the user
   // saved boxes for another layout). Coordinates are percentages (0..100)

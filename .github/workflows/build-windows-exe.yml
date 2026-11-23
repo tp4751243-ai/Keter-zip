@@ -18,13 +18,32 @@ on:
       - 'src/**'
       - 'index.html'
       - 'public/fonts/**'
+      - 'scripts/training/**'
       - '.github/workflows/build-windows-exe.yml'
 
 permissions:
   contents: write
 
 jobs:
+  # Layout-rule gate: no installer is built when a sefer type gets another
+  # type's rules (sefer-type audit), or the book / Word export rules break.
+  layout-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Sefer-type isolation audit (every type gets only its own rules)
+        run: npx tsx scripts/training/sefer-type-audit.ts
+      - name: Right-bound book rules
+        run: npx tsx scripts/training/book-rules-test.ts
+      - name: Word export RTL rules
+        run: npx tsx scripts/training/word-rtl-test.ts
+
   build-windows:
+    needs: layout-rules
     runs-on: windows-latest
     steps:
       - name: Check out
