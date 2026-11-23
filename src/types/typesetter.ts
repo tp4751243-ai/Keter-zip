@@ -847,6 +847,10 @@ export interface PageTypesetResult {
   vilnaHeader?: VilnaHeaderGeom;
   /** Layout training T2.4 — Vilna marginal apparatus columns (content coordinates of the full page). */
   marginLines?: TypesetLine[];
+  /** Layout training T7 — Mikraot Gedolot: index of the page's first pasuk (for the sefer · perek head). */
+  chumashFirstPasuk?: number;
+  /** Layout training T7 — headings (perek / parsha) that open on this page. */
+  chumashHeadings?: string[];
   /**
    * Layout training T2.2 — set on the page where the knee solver reserved
    * the opening frame's space at the top of the Gemara column; the frame

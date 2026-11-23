@@ -275,7 +275,7 @@ export const FontAnalyzerEngine = FontAnalyzer;
  * word (בראשְשִׁית) and mixes typefaces mid-word.
  */
 export const TEAMIM_FALLBACK_FONT = 'Noto Serif Hebrew';
-const TEAMIM_RE = /[\u0591-\u05AF]/;
+const TEAMIM_RE = /[\u0591-\u05AF\u05C0\u05C4\u05C5]/; // + paseq, upper/lower dot
 
 export function wordHasTeamim(word: string): boolean {
   return TEAMIM_RE.test(word);

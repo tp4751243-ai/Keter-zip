@@ -155,6 +155,9 @@ export class TypesetterEngine {
 
     const words: ShapedWord[] = [];
     let globalWordIndex = 0;
+    // The shaper's own family when no design settings resolve a style
+    // (engines that size and set fonts themselves, e.g. Mikraot Gedolot).
+    const baseFamily = this.shaper.getFontFamily();
 
     for (const run of runs) {
       const tokens = run.text.trim().split(/\s+/).filter(Boolean);
@@ -192,8 +195,11 @@ export class TypesetterEngine {
         if (run.isRemaGloss) runFontFamily = 'Noto Rashi Hebrew';
         // Layout training T3.6 — a word with teamim is set whole in a font
         // that has them when the run's font has none (never mark-by-mark).
-        if (wordHasTeamim(token) && fontLacksTeamim(runFontFamily ?? resolvedChar?.fontFamily)) {
+        if (wordHasTeamim(token) && fontLacksTeamim(runFontFamily ?? resolvedChar?.fontFamily ?? baseFamily)) {
           runFontFamily = TEAMIM_FALLBACK_FONT;
+        } else if (!resolvedChar && !run.isRemaGloss) {
+          // No style resolver: go back to the base family after a teamim word.
+          this.shaper.setFontFamily(baseFamily);
         }
         if (runFontFamily) this.shaper.setFontFamily(runFontFamily);
         if (runFontSizePt) this.shaper.setFontSize(runFontSizePt);
@@ -221,6 +227,7 @@ export class TypesetterEngine {
         if (run.isRemaGloss) shaped.isRemaGloss = true;
         if (run.isItalic || resolvedChar?.isItalic) shaped.isItalic = true;
         if (run.isUnderline || resolvedChar?.isUnderline) shaped.isUnderline = true;
+        if (!resolvedChar && runFontFamily) shaped.fontFamily = runFontFamily;
         if (resolvedChar) {
           shaped.fontFamily = runFontFamily ?? resolvedChar.fontFamily;
           shaped.fontSizePt = runFontSizePt ?? resolvedChar.fontSizePt;

@@ -154,25 +154,41 @@ function measure(shaper: HarfBuzzShaperEngine, text: string, bold: boolean): num
  * the same frame every renderer uses for the body.
  */
 export function layoutVilnaHeader(page: PageTypesetResult, perek: PerekInfo | undefined, opts: VilnaHeaderOptions): VilnaHeaderGeom {
-  const g = page.geometry;
-  const left = textBlockLeft(g);
-  const right = textBlockRight(g);
-  const size = opts.fontSizePt;
-  // Baseline sits just above the text block; never closer to the paper
-  // edge than one line of the head itself.
-  const yBaseline = Math.max(size * 1.05, g.marginTop - Math.max(5, size * 0.45));
-  const shaper = new HarfBuzzShaperEngine(size, opts.fontFamily, 400);
-  const space = size * 0.3;
-  const partGap = size * 1.1;
-
   const perekName = (opts.perekNameOverride ?? '').trim() || perek?.nameHe || '';
   const perekNumber =
     (opts.perekNumberOverride ?? '').trim() || (perek ? perekOrdinalHe(perek.number) : '');
-  const parts = [perekName, perekNumber ? `פרק ${perekNumber}` : '', opts.masechet].filter(p => p.trim());
+  const parts = [perekName, perekNumber ? `פרק ${perekNumber}` : '', opts.masechet];
+  const geom = layoutHeaderParts(page, parts, opts.folioText, opts.pageSide, opts.fontFamily, opts.fontSizePt);
+  return { ...geom, perekNumber: perek?.number, perekName, masechet: opts.masechet };
+}
 
+/**
+ * Lay out a running head from its parts (centred, measured word by word)
+ * plus the folio on the OUTER corner. Shared by the Vilna head
+ * (perek · פרק N · masechta) and the Chumash head (sefer · perek).
+ * Physical page coordinates; the text block is mirrored per page.
+ */
+export function layoutHeaderParts(
+  page: PageTypesetResult,
+  rawParts: string[],
+  folioText: string,
+  pageSide: 'left' | 'right',
+  fontFamily: string,
+  fontSizePt: number
+): VilnaHeaderGeom {
+  const g = page.geometry;
+  const left = textBlockLeft(g);
+  const right = textBlockRight(g);
+  const size = fontSizePt;
+  // Baseline sits just above the text block; never closer to the paper
+  // edge than one line of the head itself.
+  const yBaseline = Math.max(size * 1.05, g.marginTop - Math.max(5, size * 0.45));
+  const shaper = new HarfBuzzShaperEngine(size, fontFamily, 400);
+  const space = size * 0.3;
+  const partGap = size * 1.1;
+  const parts = rawParts.filter(p => p && p.trim());
   const items: VilnaHeaderItem[] = [];
   if (parts.length > 0) {
-    // Measure words, then place them right → left, centred on the block.
     const measured = parts.map(p =>
       p.split(/\s+/).filter(Boolean).map(w => ({ text: w, width: measure(shaper, w, false) }))
     );
@@ -196,30 +212,24 @@ export function layoutVilnaHeader(page: PageTypesetResult, perek: PerekInfo | un
       yBaseline,
       fontSizePt: size,
       fontWeight: 400,
-      fontFamily: opts.fontFamily,
+      fontFamily,
     });
   }
-  if (opts.folioText.trim()) {
-    const w = measure(shaper, opts.folioText, true);
-    const xLeft = opts.pageSide === 'left' ? left : right - w;
+  if (folioText.trim()) {
+    const w = measure(shaper, folioText, true);
+    const xLeft = pageSide === 'left' ? left : right - w;
     items.push({
       kind: 'folio',
-      words: [{ text: opts.folioText, xLeft, xRight: xLeft + w }],
+      words: [{ text: folioText, xLeft, xRight: xLeft + w }],
       xLeft,
       xRight: xLeft + w,
       yBaseline,
       fontSizePt: size,
       fontWeight: 700,
-      fontFamily: opts.fontFamily,
+      fontFamily,
     });
   }
-  return {
-    items,
-    perekNumber: perek?.number,
-    perekName,
-    masechet: opts.masechet,
-    folio: opts.folioText,
-  };
+  return { items, perekName: parts[0] ?? '', masechet: parts[parts.length - 1] ?? '', folio: folioText };
 }
 
 /**

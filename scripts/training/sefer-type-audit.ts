@@ -114,10 +114,18 @@ for (const c of cases) {
   const problems: string[] = [];
   if (!c.talmud) {
     if (pages.some(p => /[.:]$/.test(p.folioDisplay ?? ''))) leaks.push(`daf folio "${pages[0]?.folioDisplay}"`);
-    if (pages.some(p => p.vilnaHeader)) leaks.push('Vilna running head');
+    // The Chumash head (sefer · perek) shares the head geometry; only the
+    // Vilna head carries a perek number + masechta.
+    if (pages.some(p => p.vilnaHeader && p.vilnaHeader.perekNumber !== undefined)) leaks.push('Vilna running head');
     if (pages.some(p => (p.transitionMarkers?.length ?? 0) > 0)) leaks.push('גמ׳ marker');
     if (pages.some(p => p.openingWordBox)) leaks.push('masechta opening frame');
-    if (pages.some(p => (p.marginLines?.length ?? 0) > 0)) leaks.push('Vilna marginal columns');
+    // Mikraot Gedolot pages keep their Onkelos column and commentary bands
+    // in marginLines (marked by chumashHeadings); anything else is a leak.
+    if (pages.some(p => (p.marginLines?.length ?? 0) > 0 && p.chumashHeadings === undefined)) leaks.push('Vilna marginal columns');
+    if (layoutType === 'mikraot_gedolot') {
+      if (!pages.every(p => p.chumashHeadings !== undefined)) problems.push('Mikraot Gedolot not laid out by the Chumash engine');
+      if (!pages.every(p => p.vilnaHeader?.items.some(i => i.kind === 'title'))) problems.push('Chumash page without the sefer · perek head');
+    }
     if (pages.some(p => p.michtavBox)) leaks.push('Michtav strip');
     if (pages[0] && pages[0].pageNumber === 2) leaks.push('daf-bet numbering (first page = 2)');
     if (c.path === 'switch' && Math.round(c.settings.pageLayout.geometry.pageWidth) === 680) leaks.push('Vilna folio page size inherited from the Shas book');

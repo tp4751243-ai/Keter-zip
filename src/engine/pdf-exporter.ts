@@ -1546,7 +1546,7 @@ export class PdfExporter {
           line,
           mLeft + (line.xRight ?? contentW),
           mTop + line.yBaseline,
-          tertiaryFont,
+          line.fontFamily || tertiaryFont,
           line.fontSizePt ?? 8,
           line.fontWeight ?? 400,
           line.alignment === 'center'

@@ -639,11 +639,19 @@ export function applyRecipeToSettingsById(
   if (VILNA_KNEE_RECIPES.has(resolvedId)) {
     next = DesignSettingsEngine.updateLayoutSettings(next, { layoutType: 'rav_text' }, 'ai');
   }
+  // Layout training T7 — a Chumash-family design is laid out by the
+  // Mikraot Gedolot engine (pasuk + Onkelos, titled commentary bands).
+  if (MIKRAOT_RECIPES.has(resolvedId)) {
+    next = DesignSettingsEngine.updateLayoutSettings(next, { layoutType: 'mikraot_gedolot' }, 'ai');
+  }
   // Layout training T5 — the design's own sefer type decides which
   // type-specific rules are on (a Chumash recipe never keeps Gemara rules).
   next = DesignSettingsEngine.applySeferType(next, seferTypeForRecipe(resolvedId, recipe.baseLayout ?? 'single_column'));
   return next;
 }
+
+/** Recipes whose page is a Chumash / Mikraot Gedolot page (T7 engine). */
+export const MIKRAOT_RECIPES: ReadonlySet<string> = new Set(['mikraot-gedolot', 'chumash-rishonim', 'chumash', 'tanach-commentary']);
 
 /** Recipes whose page is a Vilna Tzuras HaDaf (laid out by the rav_text knee engine). */
 export const VILNA_KNEE_RECIPES: ReadonlySet<string> = new Set(['talmud-bavli', 'vilna-shas', 'shas-oz-vehadar']);

@@ -88,7 +88,8 @@ import {
   type MarginSide,
   type QueuedMarginal,
 } from './vilna-marginalia';
-import { derivePerakim, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
+import { paginateMikraotGedolot, chumashHeaderParts } from './mikraot-gedolot';
+import { derivePerakim, layoutHeaderParts, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
   ein_mishpat: { he: 'עין משפט', en: 'Ein Mishpat', patterns: [/עין\s*משפט/, /ein[_\s-]*mishpat/i] },
@@ -378,6 +379,17 @@ export class PaginationEngine {
         );
         break;
       case 'mikraot_gedolot':
+        // Layout training T7 — a Chumash page is pasuk + Onkelos on top
+        // and titled two-column commentary bands, never the Gemara knee.
+        doc = paginateMikraotGedolot({
+          title,
+          units,
+          links: effectiveRavLinks,
+          geometry,
+          designSettings,
+          rulesConfig,
+        });
+        break;
       case 'rav_text':
       default:
         doc = this.paginateRavText(
@@ -753,6 +765,19 @@ export class PaginationEngine {
             fontSizePt: vilnaHeaderSize,
           });
           // A Vilna daf carries no continuation notes.
+          pg.continuationHeader = undefined;
+          pg.continuationFooter = undefined;
+        } else if (layoutType === 'mikraot_gedolot' && !talmudFolio) {
+          // Layout training T7 — Chumash head: sefer · perek centred,
+          // page number on the outer corner.
+          pg.vilnaHeader = layoutHeaderParts(
+            pg,
+            chumashHeaderParts(units, pg.chumashFirstPasuk, title),
+            folioInfo.folioDisplay,
+            spreadSide,
+            vilnaHeaderFont,
+            Math.round(effectiveSourceFontSize * 0.9 * 10) / 10
+          );
           pg.continuationHeader = undefined;
           pg.continuationFooter = undefined;
         }
