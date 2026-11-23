@@ -1851,6 +1851,10 @@ export const EN_STRINGS: Record<string, string> = {
   'כפולת גיליון (4/8/16)': 'Signature multiple (4/8/16)',
   'כשמזינים עובי נייר, השדרה מחושבת לבד: מספר הדפים (עמודים ÷ 2) × עובי הנייר. העובי מגיע מבית הדפוס — לא לנחש. בכריכה עברית החזית היא הלוח השמאלי: [חזית] [שדרה] [גב].':
     'With a paper thickness the spine is computed: leaves (pages ÷ 2) × thickness. Get the thickness from the print shop — never guess it. On a Hebrew cover the front is the LEFT panel: [front] [spine] [back].',
+  'סוג הספר:': 'Sefer type:',
+  'סוג הספר עודכן': 'Sefer type updated',
+  'כל סוג ספר מקבל רק את הכללים שלו: מספור דף ועמוד, כותרת וילנא, מסגרת פתיחה, גמ׳ ועמודות עין משפט — רק בגמרא.':
+    'Each kind of sefer gets only its own rules: daf/amud numbering, the Vilna head, the opening frame, גמ׳ and the Ein Mishpat columns are Talmud only.',
 };
 
 /**

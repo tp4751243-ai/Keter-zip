@@ -1,4 +1,4 @@
-# Sefer-type rules audit (v0.10.4)
+# Sefer-type rules audit (v0.10.4–v0.10.5)
 
 **Problem reported:** choosing Mikraot Gedolot (or any non-Talmud sefer) applied rules that belong only to a Gemara page.
 
@@ -50,6 +50,12 @@ Rules shared on purpose (not leaks):
 - **Rashi / commentary flanking:** used by both the Talmud page and Mikraot Gedolot.
 - **Large folio page:** chosen by the Mikraot Gedolot, Shulchan Aruch, Tur, Rambam and Mishnah Berurah designs, matching their printed size.
 - **Measured page planner:** applies to every multi-stream page.
+
+## Entry points routed through the same applier (v0.10.5)
+
+- **Recipe picker in the header and Design panel.** It applied recipes by a separate route that skipped the sefer type and the Vilna knee routing. It now goes through `applyRecipeToSettingsById`, like the wizard and Word import.
+- **"Apply Vilna rules" and "Vilna classic preset" buttons.** Both now mark the book as Talmud explicitly.
+- **New "סוג הספר / Sefer type" selector** at the top of Design → page tab. It shows the current type, and changing it applies that type's rules.
 
 ## Positive checks (each type keeps its own rules)
 

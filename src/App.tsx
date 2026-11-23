@@ -147,6 +147,7 @@ import {
 import { PaginationEngine } from './engine/pagination-engine';
 import { DocxImporter } from './engine/docx-importer';
 import { buildBackOfTitlePage, buildTitlePageResult } from './engine/toc-engine';
+import { seferTypeForRecipe } from './engine/sefer-type';
 import { PdfExporter } from './engine/pdf-exporter';
 import { IdmlExporter } from './engine/idml-exporter';
 import { QaEngine } from './engine/qa-engine';
@@ -1970,28 +1971,27 @@ export default function App() {
     });
     setLocalOverrides(plan.nextLocalOverrides);
     setBreakInstructions(plan.nextBreakInstructions);
-    setLayoutType(targetLayout);
-    setDesignSettings(prev => {
-      const switched = DesignSettingsEngine.updateLayoutSettings(
-        prev,
-        { layoutType: targetLayout },
-        'user'
-      );
-      const appliedBase = applyRecipeToSettings(recipe, switched);
-      // v0.9.9 — one recipe, one result: a LIBRARY recipe applied here
-      // (header / panel picker) gets the same per-genre typography as
-      // the same recipe applied by id at import. An imported
-      // .keter-template (not a library recipe) skips the genre layer.
-      const applied = resolveHistoricalRecipe(recipe.metadata.id)
-        ? applyGenreTypography(recipe.metadata.id, appliedBase)
-        : appliedBase;
-      // Per-page custom-layout overrides belong to the old pagination;
-      // the transaction drops them (a recipe's own frames arrive with
-      // empty pageOverrides, so this is a no-op for framed recipes).
-      return plan.clearCustomPageOverrides
-        ? DesignSettingsEngine.clearAllCustomLayoutPageOverrides(applied, 'user').settings
-        : applied;
-    });
+    // Layout training T5 — ONE applier for every entry point. A library
+    // recipe goes through applyRecipeToSettingsById exactly like the
+    // wizard and Word import: genre typography, the sefer type's rules
+    // (a Chumash never keeps Gemara rules) and, for a Vilna folio, the
+    // rav_text knee engine. An imported .keter-template gets the type its
+    // base layout implies.
+    const switched = DesignSettingsEngine.updateLayoutSettings(designSettings, { layoutType: targetLayout }, 'user');
+    const appliedRecipe = resolveHistoricalRecipe(recipe.metadata.id)
+      ? applyRecipeToSettingsById(recipe.metadata.id, switched)
+      : DesignSettingsEngine.applySeferType(
+          applyRecipeToSettings(recipe, switched),
+          seferTypeForRecipe(recipe.metadata.id, recipe.baseLayout ?? 'single_column')
+        );
+    // Per-page custom-layout overrides belong to the old pagination;
+    // the transaction drops them (a recipe's own frames arrive with
+    // empty pageOverrides, so this is a no-op for framed recipes).
+    const applied = plan.clearCustomPageOverrides
+      ? DesignSettingsEngine.clearAllCustomLayoutPageOverrides(appliedRecipe, 'user').settings
+      : appliedRecipe;
+    setLayoutType(applied.layout.layoutType);
+    setDesignSettings(applied);
     if (plan.clearSelection) {
       setSelectedUnitId(null);
       setEditingUnitId(null);
@@ -2963,7 +2963,8 @@ export default function App() {
   }, [displayPages, contentUnits, ravTextLinks, showToast, t]);
 
   const handleApplyVilnaDefaults = useCallback(() => {
-    handleUpdateDesignSettings(applyVilnaShasDefaults(designSettings), t('הוחלו כללי וילנא'));
+    // Layout training T5 — explicitly choosing Vilna rules makes the book a Talmud folio.
+    handleUpdateDesignSettings(DesignSettingsEngine.applySeferType(applyVilnaShasDefaults(designSettings), 'talmud'), t('הוחלו כללי וילנא'));
     showToast(t('הוחלו כללי וילנא: כותרת פרק ממורכזת, הזחה בשורה השנייה, דיבור מודגש'), 'success');
   }, [designSettings, handleUpdateDesignSettings, showToast, t]);
   // v0.8.0 Part D — Yiddish defaults (centred parsha headings, justified

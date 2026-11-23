@@ -84,6 +84,7 @@ import { CustomLayoutDesigner } from './CustomLayoutDesigner';
 import { defaultCustomLayoutDesign } from '../engine/custom-layout-engine';
 import { getHistoricalLayoutLibrary } from '../engine/historical-layouts';
 import { VILNA_SHAS_PRESET, vilnaPresetToDesignPatch } from '../engine/vilna-preset';
+import { SEFER_TYPE_LABELS, type SeferType } from '../engine/sefer-type';
 import type { CustomLayoutBox } from '../types/design-settings';
 import { getFontLibraryFamilies, isFontEmbeddableInPdf } from '../engine/font-library';
 
@@ -1963,6 +1964,32 @@ export const DesignTypesettingPanel: React.FC<DesignTypesettingPanelProps> = ({
 
         {currentTab === 'page_geometry' && (
           <div className="space-y-4">
+            {/* Layout training T5 — the kind of sefer decides which
+                type-specific rules apply (daf folios, Vilna head, masechta
+                frame, גמ׳, marginal apparatus are Talmud only). */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[var(--ui-text-primary)] mb-1">
+                {t("סוג הספר:")}
+              </label>
+              <select
+                data-testid="sefer-type-select"
+                value={designSettings.pageLayout.seferType ?? (designSettings.layout.layoutType === 'rav_text' ? 'talmud' : '')}
+                onChange={e => {
+                  const v = e.target.value as SeferType;
+                  if (!v) return;
+                  applyWithHardRuleGuard(DesignSettingsEngine.applySeferType(designSettings, v), t("סוג הספר עודכן"));
+                }}
+                className="w-full px-2 py-1.5 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] text-[12px]"
+              >
+                {!designSettings.pageLayout.seferType && designSettings.layout.layoutType !== 'rav_text' && <option value="">{t("—")}</option>}
+                {(Object.keys(SEFER_TYPE_LABELS) as SeferType[]).map(k => (
+                  <option key={k} value={k}>
+                    {lang === 'en' ? SEFER_TYPE_LABELS[k].en : SEFER_TYPE_LABELS[k].he}
+                  </option>
+                ))}
+              </select>
+              <Hint>{t("כל סוג ספר מקבל רק את הכללים שלו: מספור דף ועמוד, כותרת וילנא, מסגרת פתיחה, גמ׳ ועמודות עין משפט — רק בגמרא.")}</Hint>
+            </div>
             <Hint>{t("השוליים הם הרווח הלבן מסביב לטקסט. שוליים קטנים יותר = יותר טקסט בכל עמוד.")}</Hint>
             {/* v0.4.0 — checklist §2: named page-size presets (Pocket … Gemara). */}
             <div>
@@ -3438,6 +3465,8 @@ export const DesignTypesettingPanel: React.FC<DesignTypesettingPanelProps> = ({
                     for (const role of patch.chalonRoles) {
                       next = DesignSettingsEngine.updateRoleStyle(next, role, { paragraph: patch.chalonParagraph }, 'user', t("תבנית וילנא")).settings;
                     }
+                    // Layout training T5 — the Vilna preset makes the book a Talmud folio.
+                    next = DesignSettingsEngine.applySeferType(next, 'talmud');
                     applyWithHardRuleGuard(next, t("החל תבנית וילנא קלאסית"));
                   }}
                   className="px-2.5 py-1 rounded-lg bg-[var(--ui-accent)] text-white text-[11px] font-semibold"
