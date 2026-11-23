@@ -63,6 +63,20 @@ export const KETER_EMBEDDED_FONTS: EmbeddedFontSpec[] = [
     fontStyle: 'bold',
     publicPath: '/fonts/DavidLibre-Bold.ttf',
   },
+  // Layout training T3.6 — the whole-word teamim font (OFL): every word
+  // with cantillation marks is set in it when the body font has none.
+  {
+    vfsFileName: 'NotoSerifHebrew-Regular.ttf',
+    fontFamily: 'Noto Serif Hebrew',
+    fontStyle: 'normal',
+    publicPath: '/fonts/NotoSerifHebrew-Regular.ttf',
+  },
+  {
+    vfsFileName: 'NotoSerifHebrew-Bold.ttf',
+    fontFamily: 'Noto Serif Hebrew',
+    fontStyle: 'bold',
+    publicPath: '/fonts/NotoSerifHebrew-Bold.ttf',
+  },
 ];
 
 export interface ExtractedPdfTextSpan {

@@ -23,6 +23,7 @@ import {
   TypesetLine,
 } from '../types/typesetter';
 import { OrnamentLibraryEngine } from './ornament-library';
+import { computeSpineWidthMm } from './book-production';
 import { EngineHardRulesEngine } from './engine-hard-rules';
 import {
   ExtractedPdfDocument,
@@ -807,7 +808,18 @@ export class PdfExporter {
   ): { isWraparound: boolean; widthPt: number; heightPt: number; bleedPt: number; spinePt: number } {
     if (cover?.coverMode === 'print_wraparound_cover' && cover.wraparoundCover) {
       const wc = cover.wraparoundCover;
-      const spinePt = this.mmToPt(Math.max(4, wc.spineWidthMm || 14));
+      // Layout training T3.5 — spine from leaves × caliper when the shop's
+      // paper thickness is known; the typed width otherwise.
+      const spineMm =
+        wc.caliperMm && wc.caliperMm > 0 && wc.interiorPageCount
+          ? computeSpineWidthMm({
+              pages: wc.interiorPageCount,
+              caliperMm: wc.caliperMm,
+              signatureMultiple: wc.signatureMultiple,
+              coverBoardMm: wc.coverBoardMm,
+            })
+          : Math.max(4, wc.spineWidthMm || 14);
+      const spinePt = this.mmToPt(Math.max(1, spineMm));
       const bleedPt = this.mmToPt(Math.max(0, wc.bleedMm ?? 3));
       return {
         isWraparound: true,
@@ -3613,7 +3625,7 @@ export class PdfExporter {
     const watermarkText = this.resolveWatermarkText(opts);
 
     const hasInDocTitlePage = bodyPages.length > 0 && bodyPages[0].isTitlePage === true;
-    const cover: CoverPageData | null =
+    let cover: CoverPageData | null =
       opts.includeCover && !hasInDocTitlePage
         ? opts.coverData ?? { title: bookDoc.title || 'ספר קודש' }
         : null;
@@ -3650,9 +3662,19 @@ export class PdfExporter {
     }
 
     const inDocTp = hasInDocTitlePage ? bodyPages[0]?.designSettings?.titlePage : undefined;
-    const inDocCoverData = inDocTp?.enabled
-      ? titlePageSettingsToCoverData(inDocTp, bookDoc.title || 'ספר קודש', geometry.pageHeight)
-      : null;
+    // Layout training T3.5 — the spine is computed from the interior page
+    // count (title, its back, TOC and body) when a caliper is given.
+    const interiorPages = bodyPages.length + tocPages.length;
+    const withPageCount = <T extends CoverPageData | null | undefined>(c: T): T =>
+      c && c.wraparoundCover
+        ? ({ ...c, wraparoundCover: { ...c.wraparoundCover, interiorPageCount: c.wraparoundCover.interiorPageCount ?? interiorPages } } as T)
+        : c;
+    cover = withPageCount(cover);
+    const inDocCoverData = withPageCount(
+      inDocTp?.enabled
+        ? titlePageSettingsToCoverData(inDocTp, bookDoc.title || 'ספר קודש', geometry.pageHeight)
+        : null
+    );
     const firstCoverDims = this.computeCoverSheetDimensions(
       cover ?? inDocCoverData,
       geometry,

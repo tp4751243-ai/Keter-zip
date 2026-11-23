@@ -794,7 +794,19 @@ export type TitlePageBorderStyleId =
 export type TitlePageCoverMode = 'interior_title_page' | 'print_wraparound_cover';
 
 export interface WraparoundCoverSettings {
+  /** Spine width typed by hand; used when no caliper is given. */
   spineWidthMm: number;
+  /**
+   * Layout training T3.5 — paper thickness per LEAF in mm, from the print
+   * shop. When set, the spine is computed: leaves × caliper + board.
+   */
+  caliperMm?: number;
+  /** Extra mm the shop adds to the spine (board / glue allowance). */
+  coverBoardMm?: number;
+  /** Shop signature multiple (4, 8, 16) the page count is rounded up to. */
+  signatureMultiple?: number;
+  /** Set by the exporter: interior page count the spine is computed from. */
+  interiorPageCount?: number;
   bleedMm: number;
   backCoverText: string;
   backCoverSubtitle: string;

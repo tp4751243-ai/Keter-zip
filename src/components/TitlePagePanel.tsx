@@ -312,6 +312,44 @@ export const TitlePagePanel: React.FC<TitlePagePanelProps> = ({
                 }, summaryHe);
               return (
                 <div className="space-y-2 pt-2 border-t border-[var(--ui-border)]">
+                  {/* Layout training T3.5 — spine = leaves × paper thickness. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={labelCls}>{t('עובי נייר לדף (מ״מ, מבית הדפוס)')}</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.005}
+                        data-testid="wraparound-caliper"
+                        value={wc.caliperMm ?? ''}
+                        placeholder="0.1"
+                        onChange={e => {
+                          const v = Number(e.target.value);
+                          updateWc({ caliperMm: v > 0 && v <= 1 ? v : undefined }, 'עובי הנייר עודכן');
+                        }}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t('כפולת גיליון (4/8/16)')}</label>
+                      <input
+                        type="number"
+                        min={2}
+                        max={64}
+                        step={2}
+                        data-testid="wraparound-signature"
+                        value={wc.signatureMultiple ?? ''}
+                        placeholder="2"
+                        onChange={e => {
+                          const v = Math.round(Number(e.target.value));
+                          updateWc({ signatureMultiple: v >= 2 ? v : undefined }, 'כפולת הגיליון עודכנה');
+                        }}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                  <Hint>{t('כשמזינים עובי נייר, השדרה מחושבת לבד: מספר הדפים (עמודים ÷ 2) × עובי הנייר. העובי מגיע מבית הדפוס — לא לנחש. בכריכה עברית החזית היא הלוח השמאלי: [חזית] [שדרה] [גב].')}</Hint>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className={labelCls}>{t('רוחב שדרה (מ״מ)')}</label>

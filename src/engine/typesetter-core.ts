@@ -96,6 +96,8 @@ export function computeParagraphLineIndents(
   };
 }
 
+import { TEAMIM_FALLBACK_FONT, fontLacksTeamim, wordHasTeamim } from './font-analyzer';
+
 export class TypesetterEngine {
   private shaper: HarfBuzzShaperEngine;
   private rulesConfig?: TypesettingRulesConfig;
@@ -188,6 +190,11 @@ export class TypesetterEngine {
           runFontSizePt = Number((runFontSizePt * 0.85).toFixed(2));
         }
         if (run.isRemaGloss) runFontFamily = 'Noto Rashi Hebrew';
+        // Layout training T3.6 — a word with teamim is set whole in a font
+        // that has them when the run's font has none (never mark-by-mark).
+        if (wordHasTeamim(token) && fontLacksTeamim(runFontFamily ?? resolvedChar?.fontFamily)) {
+          runFontFamily = TEAMIM_FALLBACK_FONT;
+        }
         if (runFontFamily) this.shaper.setFontFamily(runFontFamily);
         if (runFontSizePt) this.shaper.setFontSize(runFontSizePt);
 

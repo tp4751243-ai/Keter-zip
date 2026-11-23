@@ -1847,6 +1847,10 @@ export const EN_STRINGS: Record<string, string> = {
   // Layout training T2 (Vilna header / frame / margins)
   'שדות ריקים = אוטומטי: שם הפרק ומספרו מזוהים מהטקסט בכל עמוד (כולל הדרן עלך), שם המסכת מכותרת "מסכת …", ומספר הדף בצד החיצוני.':
     'Leave empty for automatic: the perek name and number are detected from the text on each page (including הדרן עלך), the masechta from a "מסכת …" heading, and the daf number goes on the outer corner.',
+  'עובי נייר לדף (מ״מ, מבית הדפוס)': 'Paper thickness per leaf (mm, from the print shop)',
+  'כפולת גיליון (4/8/16)': 'Signature multiple (4/8/16)',
+  'כשמזינים עובי נייר, השדרה מחושבת לבד: מספר הדפים (עמודים ÷ 2) × עובי הנייר. העובי מגיע מבית הדפוס — לא לנחש. בכריכה עברית החזית היא הלוח השמאלי: [חזית] [שדרה] [גב].':
+    'With a paper thickness the spine is computed: leaves (pages ÷ 2) × thickness. Get the thickness from the print shop — never guess it. On a Hebrew cover the front is the LEFT panel: [front] [spine] [back].',
 };
 
 /**

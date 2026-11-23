@@ -8,16 +8,48 @@ import { FontCapability } from '../types/typesetter';
 
 export const KNOWN_HOLY_BOOK_FONTS: FontCapability[] = [
   {
-    family: 'Frank Ruhl Libre',
-    postScriptName: 'FrankRuhlLibre-Regular',
+    family: 'Noto Serif Hebrew',
+    postScriptName: 'NotoSerifHebrew-Regular',
     hasHebrew: true,
     hasNikud: true,
+    // Measured: all 31 cantillation marks, nikkud and meteg. Bundled
+    // (public/fonts, OFL) as the whole-word teamim font.
     hasTaamim: true,
     hasGposMark: true,
     hasGposMkmk: true,
     hasGsubLigature: true,
+    suitabilityScore: 95,
+    notes: 'Serif with full nikkud AND teamim; Keter sets every word that carries cantillation in it when the body font has none.',
+    recommendedRole: 'main_source',
+  },
+  {
+    family: 'David Libre',
+    postScriptName: 'DavidLibre-Regular',
+    hasHebrew: true,
+    hasNikud: true,
+    // Measured: no cantillation marks and no meteg.
+    hasTaamim: false,
+    hasGposMark: true,
+    hasGposMkmk: false,
+    hasGsubLigature: true,
+    suitabilityScore: 85,
+    notes: 'Classic David design with nikkud; no teamim and no meteg (such words switch whole to Noto Serif Hebrew).',
+    recommendedRole: 'main_source',
+  },
+  {
+    family: 'Frank Ruhl Libre',
+    postScriptName: 'FrankRuhlLibre-Regular',
+    hasHebrew: true,
+    hasNikud: true,
+    // Measured (layout training T3.6, cmap of public/fonts/FrankRuhlLibre-
+    // Regular.ttf): 0 of the 31 cantillation marks U+0591–U+05AF; nikkud
+    // and meteg present. Words with teamim are set in TEAMIM_FALLBACK_FONT.
+    hasTaamim: false,
+    hasGposMark: true,
+    hasGposMkmk: true,
+    hasGsubLigature: true,
     suitabilityScore: 98,
-    notes: 'Premier traditional Jewish holy-book serif typeface. Flawless Nikud and Cantillation support.',
+    notes: 'Premier traditional Jewish holy-book serif typeface. Full nikkud and meteg; no cantillation marks (teamim words switch whole to Noto Serif Hebrew).',
     recommendedRole: 'main_source',
   },
   {
@@ -38,7 +70,8 @@ export const KNOWN_HOLY_BOOK_FONTS: FontCapability[] = [
     postScriptName: 'NotoRashiHebrew-Regular',
     hasHebrew: true,
     hasNikud: true,
-    hasTaamim: false,
+    // Measured: all 31 cantillation marks present.
+    hasTaamim: true,
     hasGposMark: true,
     hasGposMkmk: true,
     hasGsubLigature: true,
@@ -233,3 +266,24 @@ export class FontAnalyzer {
 
 export const FontAnalyzerEngine = FontAnalyzer;
 
+
+
+/**
+ * Layout training T3.6 (hebrew-book-typesetter rule): a word that carries
+ * cantillation marks is set WHOLE in a font that has them — never patched
+ * mark by mark from a fallback font, which duplicates letters inside the
+ * word (בראשְשִׁית) and mixes typefaces mid-word.
+ */
+export const TEAMIM_FALLBACK_FONT = 'Noto Serif Hebrew';
+const TEAMIM_RE = /[\u0591-\u05AF]/;
+
+export function wordHasTeamim(word: string): boolean {
+  return TEAMIM_RE.test(word);
+}
+
+/** True when the font is known to lack cantillation marks (unknown fonts are trusted). */
+export function fontLacksTeamim(family: string | undefined): boolean {
+  if (!family) return false;
+  const f = KNOWN_HOLY_BOOK_FONTS.find(k => k.family.toLowerCase() === family.toLowerCase());
+  return f ? !f.hasTaamim : false;
+}

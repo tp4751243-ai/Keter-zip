@@ -7,6 +7,8 @@
 import { checkPunctuation, applyFixes } from '../../src/engine/text-proofing';
 import { formatBodyFolioLabel } from '../../src/engine/vilna-shas';
 import { textBlockLeft, textBlockRight } from '../../src/types/typesetter';
+import { computeSpineWidthMm, printPageCount } from '../../src/engine/book-production';
+import { fontLacksTeamim, wordHasTeamim } from '../../src/engine/font-analyzer';
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = '') => {
@@ -42,6 +44,17 @@ check('folio 15 with gershayim on', folio(15, true) === 'ט״ו', folio(15, true
 const g = { pageWidth: 400, pageHeight: 600, marginTop: 40, marginBottom: 40, marginInside: 50, marginOutside: 30, isVerso: false };
 check('recto text block starts at the outside margin', textBlockLeft({ ...g, textLeftPt: 30 }) === 30 && textBlockRight({ ...g, textLeftPt: 30 }) === 350);
 check('verso text block starts at the inside margin', textBlockLeft({ ...g, textLeftPt: 50 }) === 50 && textBlockRight({ ...g, textLeftPt: 50 }) === 370);
+
+// Cover: spine = leaves × caliper (skill example: 212 pp, 0.1 mm → 10.6 mm).
+check('spine 212 pages × 0.1mm caliper = 10.6mm', computeSpineWidthMm({ pages: 212, caliperMm: 0.1 }) === 10.6, String(computeSpineWidthMm({ pages: 212, caliperMm: 0.1 })));
+check('odd page count rounds up to even', printPageCount(211) === 212);
+check('signature multiple 16: 212 → 224', printPageCount(212, 16) === 224);
+
+// Teamim: whole words with cantillation leave fonts without the marks.
+check('בְּרֵאשִׁ֖ית has teamim', wordHasTeamim('בְּרֵאשִׁ֖ית'));
+check('בְּרֵאשִׁית (nikkud only) has no teamim', !wordHasTeamim('בְּרֵאשִׁית'));
+check('Frank Ruhl Libre lacks teamim (measured)', fontLacksTeamim('Frank Ruhl Libre'));
+check('Noto Serif Hebrew has teamim (measured)', !fontLacksTeamim('Noto Serif Hebrew'));
 
 console.log(fails ? `${fails} FAILED` : 'all book rules pass');
 process.exit(fails ? 1 : 0);
