@@ -15,6 +15,7 @@ import { PdfExporter } from '../../src/engine/pdf-exporter';
 import { rtlPlacementOrder } from '../../src/engine/bidi-runs';
 import { TypesetterEngine } from '../../src/engine/typesetter-core';
 import type { ContentUnit, PageTypesetResult } from '../../src/types/typesetter';
+import { jsPDF } from 'jspdf';
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = '') => {
@@ -84,6 +85,19 @@ check('pure Hebrew unchanged', ord('בראשית ברא אלהים') === 'ברא
   const ws = PdfExporter.buildPageRenderPlan(page).lines[0]?.words ?? [];
   const x = (t: string) => ws.find(w => w.text === t)?.xLeft ?? NaN;
   check('print plan draws "Isaiah 40:1" left to right', x('Isaiah') < x('40:1') && x('40:1') < x('ראה') && x('שם') < x('Isaiah'), ws.map(w => `${w.text}@${w.xLeft.toFixed(0)}`).join(' '));
+}
+
+// Print boxes: TrimBox = the page, BleedBox = page + bleed (press-ready PDF).
+{
+  const b = 8.5;
+  const doc = new jsPDF({ unit: 'pt', format: [420 + 2 * b, 595 + 2 * b] });
+  PdfExporter.applyPrintBoxes(doc, b);
+  const out = doc.output();
+  check('PDF carries /TrimBox = page inside the bleed', /\/TrimBox \[8\.5 8\.5 428\.5 603\.5\]/.test(out), (out.match(/\/TrimBox \[[^\]]*\]/) ?? ['none'])[0]);
+  check('PDF carries /BleedBox = the sheet', /\/BleedBox \[0\.? 0\.? 437\.? 612\.?\]/.test(out), (out.match(/\/BleedBox \[[^\]]*\]/) ?? ['none'])[0]);
+  const screen = new jsPDF({ unit: 'pt', format: [420, 595] });
+  PdfExporter.applyPrintBoxes(screen, 0);
+  check('screen PDF (no bleed) has no print boxes', !/TrimBox/.test(screen.output()));
 }
 
 console.log(fails ? `${fails} FAILED` : 'all book rules pass');

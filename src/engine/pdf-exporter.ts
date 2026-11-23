@@ -559,6 +559,34 @@ export class PdfExporter {
     }
   }
 
+  /**
+   * Print boxes for a press-ready file (approach from DesignCraft's PDF
+   * export, MIT / Apache-2.0: MediaBox = trim + bleed, TrimBox = the
+   * page, BleedBox = page + bleed). Keter already pads every sheet by the
+   * bleed and draws crop marks; without /TrimBox a print shop's preflight
+   * (Acrobat, PitStop, imposition) takes the padded sheet as the page.
+   */
+  public static applyPrintBoxes(doc: jsPDF, bleedPt: number): void {
+    if (!(bleedPt > 0)) return;
+    const n = doc.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+      const ctx = (doc.getPageInfo(i) as unknown as { pageContext: Record<string, unknown> }).pageContext as {
+        mediaBox: { bottomLeftX: number; bottomLeftY: number; topRightX: number; topRightY: number };
+        trimBox: unknown;
+        bleedBox: unknown;
+      };
+      const mb = ctx.mediaBox;
+      if (!mb || mb.topRightX - mb.bottomLeftX <= 2 * bleedPt || mb.topRightY - mb.bottomLeftY <= 2 * bleedPt) continue;
+      ctx.bleedBox = { ...mb };
+      ctx.trimBox = {
+        bottomLeftX: mb.bottomLeftX + bleedPt,
+        bottomLeftY: mb.bottomLeftY + bleedPt,
+        topRightX: mb.topRightX - bleedPt,
+        topRightY: mb.topRightY - bleedPt,
+      };
+    }
+  }
+
   /** Crop marks at the four trim-box corners (the trim box is inset by `bleedPt` from the media edge). */
   private static drawTrimCropMarks(
     doc: jsPDF,
@@ -3557,6 +3585,7 @@ export class PdfExporter {
       applyWatermark(spreadW, mediaH);
     }
 
+    this.applyPrintBoxes(doc, bleedPt);
     const blob = doc.output('blob');
     await this.assertSpreadPdf(blob, sheetCount);
     return blob;
@@ -3719,6 +3748,7 @@ export class PdfExporter {
       applyWatermark(mediaW, mediaH);
     }
 
+    this.applyPrintBoxes(doc, bleedPt);
     const pdfBlob = doc.output('blob');
     // v0.5.0 (Title Page): a user-imported frame image is a deliberate
     // raster element on the title page (its text stays vector). Allow
