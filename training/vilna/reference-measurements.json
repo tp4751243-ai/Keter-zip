@@ -1,0 +1,452 @@
+{
+ "summary": {
+  "pages": 8,
+  "commentaryToGemara": 0.818,
+  "marginalToGemara": 0.562,
+  "headerToGemara": 1.672,
+  "textBlockWidthInGemaraEm": 40.14,
+  "gemaraLeadingRatio": 0.876,
+  "commentaryLeadingRatio": 0.73,
+  "gemaraColumnWidth": 0.309,
+  "marginColumnWidth": 0.103,
+  "headerBaselineAboveBodyInGemaraEm": 0.423,
+  "pageAspect": 1.382
+ },
+ "pages": [
+  {
+   "file": "HebrewBooksOrg_36081_page_2.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7677
+   },
+   "sizes": {
+    "gemaraPt": 13.4,
+    "commentaryPt": 6.7,
+    "commentaryToGemara": 0.5,
+    "marginalToGemara": 0.366,
+    "headerToGemara": 0.813
+   },
+   "textBlockWidthInGemaraEm": 41.07,
+   "columns": {
+    "gemara": {
+     "x0": 0.3452,
+     "x1": 0.6542,
+     "lines": 54,
+     "leadingRatio": 0.896
+    },
+    "commentaryRight": {
+     "x0": 0.8962,
+     "x1": 0.9995,
+     "lines": 37,
+     "leadingRatio": 0.522
+    },
+    "commentaryLeft": {
+     "x0": 0.0,
+     "x1": 0.1032,
+     "lines": 56,
+     "leadingRatio": 0.522
+    },
+    "commentaryFullWidthLines": 8,
+    "marginLeft": {
+     "x0": 0.0179,
+     "x1": 0.0494,
+     "lines": 3,
+     "leadingRatio": 2.164
+    },
+    "marginRight": null
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 1.948,
+    "runs": 44
+   },
+   "fill": {
+    "gemaraLinesShare": 0.201
+   }
+  },
+  {
+   "file": "HebrewBooksOrg_36084_page_2.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7093
+   },
+   "sizes": {
+    "gemaraPt": 13.7,
+    "commentaryPt": 11.2,
+    "commentaryToGemara": 0.818,
+    "marginalToGemara": 0.562,
+    "headerToGemara": 1.672
+   },
+   "textBlockWidthInGemaraEm": 40.14,
+   "columns": {
+    "gemara": {
+     "x0": 0.3453,
+     "x1": 0.6544,
+     "lines": 34,
+     "leadingRatio": 0.876
+    },
+    "commentaryRight": {
+     "x0": 0.6803,
+     "x1": 0.8811,
+     "lines": 44,
+     "leadingRatio": 0.73
+    },
+    "commentaryLeft": {
+     "x0": 0.1186,
+     "x1": 0.3194,
+     "lines": 40,
+     "leadingRatio": 0.803
+    },
+    "commentaryFullWidthLines": 33,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.103,
+     "lines": 87,
+     "leadingRatio": 0.547
+    },
+    "marginRight": {
+     "x0": 0.8968,
+     "x1": 0.9998,
+     "lines": 71,
+     "leadingRatio": 0.584
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.423,
+    "runs": 7
+   },
+   "fill": {
+    "gemaraLinesShare": 0.118
+   }
+  },
+  {
+   "file": "HebrewBooksOrg_36084_page_3.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7149
+   },
+   "sizes": {
+    "gemaraPt": 13.7,
+    "commentaryPt": 11.2,
+    "commentaryToGemara": 0.818,
+    "marginalToGemara": 0.54,
+    "headerToGemara": 1.672
+   },
+   "textBlockWidthInGemaraEm": 40.15,
+   "columns": {
+    "gemara": {
+     "x0": 0.3453,
+     "x1": 0.6544,
+     "lines": 68,
+     "leadingRatio": 0.876
+    },
+    "commentaryRight": {
+     "x0": 0.6803,
+     "x1": 0.881,
+     "lines": 57,
+     "leadingRatio": 0.73
+    },
+    "commentaryLeft": {
+     "x0": 0.1186,
+     "x1": 0.3193,
+     "lines": 67,
+     "leadingRatio": 0.73
+    },
+    "commentaryFullWidthLines": 1,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.1016,
+     "lines": 114,
+     "leadingRatio": 0.511
+    },
+    "marginRight": {
+     "x0": 0.8967,
+     "x1": 0.9997,
+     "lines": 101,
+     "leadingRatio": 0.584
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.423,
+    "runs": 7
+   },
+   "fill": {
+    "gemaraLinesShare": 0.224
+   }
+  },
+  {
+   "file": "HebrewBooksOrg_36084_page_5.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7655
+   },
+   "sizes": {
+    "gemaraPt": 13.7,
+    "commentaryPt": 11.2,
+    "commentaryToGemara": 0.818,
+    "marginalToGemara": 0.562,
+    "headerToGemara": 1.672
+   },
+   "textBlockWidthInGemaraEm": 40.14,
+   "columns": {
+    "gemara": {
+     "x0": 0.3453,
+     "x1": 0.6545,
+     "lines": 49,
+     "leadingRatio": 0.876
+    },
+    "commentaryRight": {
+     "x0": 0.6803,
+     "x1": 0.8811,
+     "lines": 39,
+     "leadingRatio": 0.766
+    },
+    "commentaryLeft": {
+     "x0": 0.1186,
+     "x1": 0.3194,
+     "lines": 56,
+     "leadingRatio": 0.766
+    },
+    "commentaryFullWidthLines": 14,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.103,
+     "lines": 94,
+     "leadingRatio": 0.511
+    },
+    "marginRight": {
+     "x0": 0.8968,
+     "x1": 0.9847,
+     "lines": 71,
+     "leadingRatio": 0.584
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.423,
+    "runs": 7
+   },
+   "fill": {
+    "gemaraLinesShare": 0.194
+   }
+  },
+  {
+   "file": "daf 1.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.6801
+   },
+   "sizes": {
+    "gemaraPt": 13.4,
+    "commentaryPt": 10.9,
+    "commentaryToGemara": 0.813,
+    "marginalToGemara": 0.5,
+    "headerToGemara": 1.701
+   },
+   "textBlockWidthInGemaraEm": 42.35,
+   "columns": {
+    "gemara": {
+     "x0": 0.3498,
+     "x1": 0.6494,
+     "lines": 29,
+     "leadingRatio": 0.896
+    },
+    "commentaryRight": {
+     "x0": 0.6744,
+     "x1": 0.869,
+     "lines": 79,
+     "leadingRatio": 0.746
+    },
+    "commentaryLeft": {
+     "x0": 0.1301,
+     "x1": 0.3248,
+     "lines": 51,
+     "leadingRatio": 0.746
+    },
+    "commentaryFullWidthLines": 21,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.1148,
+     "lines": 108,
+     "leadingRatio": 0.522
+    },
+    "marginRight": {
+     "x0": 0.8841,
+     "x1": 0.9989,
+     "lines": 101,
+     "leadingRatio": 0.522
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.381,
+    "runs": 5
+   },
+   "fill": {
+    "gemaraLinesShare": 0.074
+   }
+  },
+  {
+   "file": "gm 4.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7943
+   },
+   "sizes": {
+    "gemaraPt": 13.7,
+    "commentaryPt": 11.2,
+    "commentaryToGemara": 0.818,
+    "marginalToGemara": 0.562,
+    "headerToGemara": 1.672
+   },
+   "textBlockWidthInGemaraEm": 40.14,
+   "columns": {
+    "gemara": {
+     "x0": 0.3453,
+     "x1": 0.6544,
+     "lines": 59,
+     "leadingRatio": 0.876
+    },
+    "commentaryRight": {
+     "x0": 0.6803,
+     "x1": 0.8812,
+     "lines": 58,
+     "leadingRatio": 0.73
+    },
+    "commentaryLeft": {
+     "x0": 0.1186,
+     "x1": 0.3194,
+     "lines": 52,
+     "leadingRatio": 0.73
+    },
+    "commentaryFullWidthLines": 1,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.1031,
+     "lines": 84,
+     "leadingRatio": 0.584
+    },
+    "marginRight": {
+     "x0": 0.8968,
+     "x1": 0.9998,
+     "lines": 79,
+     "leadingRatio": 0.584
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.423,
+    "runs": 7
+   },
+   "fill": {
+    "gemaraLinesShare": 0.203
+   }
+  },
+  {
+   "file": "gm1.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7074
+   },
+   "sizes": {
+    "gemaraPt": 13.7,
+    "commentaryPt": 11.2,
+    "commentaryToGemara": 0.818,
+    "marginalToGemara": 0.562,
+    "headerToGemara": 1.672
+   },
+   "textBlockWidthInGemaraEm": 40.14,
+   "columns": {
+    "gemara": {
+     "x0": 0.3453,
+     "x1": 0.6544,
+     "lines": 33,
+     "leadingRatio": 0.876
+    },
+    "commentaryRight": {
+     "x0": 0.6803,
+     "x1": 0.8812,
+     "lines": 51,
+     "leadingRatio": 0.73
+    },
+    "commentaryLeft": {
+     "x0": 0.1186,
+     "x1": 0.3194,
+     "lines": 52,
+     "leadingRatio": 0.73
+    },
+    "commentaryFullWidthLines": 23,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.103,
+     "lines": 107,
+     "leadingRatio": 0.511
+    },
+    "marginRight": {
+     "x0": 0.8968,
+     "x1": 0.9975,
+     "lines": 100,
+     "leadingRatio": 0.511
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.423,
+    "runs": 7
+   },
+   "fill": {
+    "gemaraLinesShare": 0.097
+   }
+  },
+  {
+   "file": "gm2.pdf",
+   "pageAspect": 1.3818,
+   "textBlock": {
+    "widthToHeight": 0.7093
+   },
+   "sizes": {
+    "gemaraPt": 13.7,
+    "commentaryPt": 11.2,
+    "commentaryToGemara": 0.818,
+    "marginalToGemara": 0.562,
+    "headerToGemara": 1.672
+   },
+   "textBlockWidthInGemaraEm": 40.14,
+   "columns": {
+    "gemara": {
+     "x0": 0.3453,
+     "x1": 0.6544,
+     "lines": 34,
+     "leadingRatio": 0.876
+    },
+    "commentaryRight": {
+     "x0": 0.6803,
+     "x1": 0.8811,
+     "lines": 44,
+     "leadingRatio": 0.73
+    },
+    "commentaryLeft": {
+     "x0": 0.1186,
+     "x1": 0.3194,
+     "lines": 40,
+     "leadingRatio": 0.803
+    },
+    "commentaryFullWidthLines": 33,
+    "marginLeft": {
+     "x0": 0.0,
+     "x1": 0.103,
+     "lines": 87,
+     "leadingRatio": 0.547
+    },
+    "marginRight": {
+     "x0": 0.8968,
+     "x1": 0.9998,
+     "lines": 71,
+     "leadingRatio": 0.584
+    }
+   },
+   "header": {
+    "baselineAboveBodyInGemaraEm": 0.423,
+    "runs": 7
+   },
+   "fill": {
+    "gemaraLinesShare": 0.118
+   }
+  }
+ ]
+}

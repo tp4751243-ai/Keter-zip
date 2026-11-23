@@ -578,6 +578,11 @@ export interface RunningHeaderSettings {
   perekNumberText?: string;
   perekTitleText?: string;
   useStructuredVilnaHeader?: boolean;
+  /**
+   * Layout training T2.1 — Vilna head size in pt. Unset = 1.6 × the
+   * Gemara size (measured median on 8 Vilna reference pages: 1.67).
+   */
+  vilnaHeaderFontSizePt?: number;
 }
 
 /** Per-folio header text override: only set fields replace the global text. */

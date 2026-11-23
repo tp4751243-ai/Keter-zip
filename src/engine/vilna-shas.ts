@@ -55,6 +55,7 @@
 import type { ContentRole, ContentUnit, PageTypesetResult, RavTextLink, TierConfig } from '../types/typesetter';
 import type { CustomLayoutBox, ProfessionalDesignSettings } from '../types/design-settings';
 import { DesignSettingsEngine } from './design-settings-engine';
+import { DEFAULT_RUNNING_HEADER_SETTINGS } from '../types/design-settings';
 import type { LocalRuleOverride } from './typesetting-rules-engine';
 
 /**
@@ -840,6 +841,19 @@ export function applyVilnaShasDefaults(settings: ProfessionalDesignSettings): Pr
   // v0.8.0 Part C (§7): Vilna defaults also switch the centred decorative
   // Michtav box on for the first daf (toggleable in the design panel).
   next = DesignSettingsEngine.updateRavTextSettings(next, { michtavEnabled: true }, 'user');
+  // Layout training T2.1 — the Vilna running head (perek name, perek
+  // number, masechta; folio on the outer corner).
+  next = DesignSettingsEngine.updatePageElementsSettings(
+    next,
+    {
+      runningHeader: {
+        ...DEFAULT_RUNNING_HEADER_SETTINGS,
+        ...(next.pageElements?.runningHeader ?? {}),
+        useStructuredVilnaHeader: true,
+      },
+    },
+    'user'
+  );
   return next;
 }
 

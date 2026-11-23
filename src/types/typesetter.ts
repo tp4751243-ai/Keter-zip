@@ -300,6 +300,31 @@ export interface OpeningWordBoxGeom {
   isCentered?: boolean;
 }
 
+/**
+ * Layout training T2.1 — the Vilna running head, fully laid out by the
+ * engine (see engine/vilna-header.ts). PHYSICAL page coordinates (pt from
+ * the page's top-left corner); every word is pre-measured, so renderers
+ * draw each word at [xLeft, xRight] on `yBaseline` and never re-measure.
+ */
+export interface VilnaHeaderItem {
+  kind: 'title' | 'folio';
+  words: Array<{ text: string; xLeft: number; xRight: number }>;
+  xLeft: number;
+  xRight: number;
+  yBaseline: number;
+  fontSizePt: number;
+  fontWeight: number;
+  fontFamily: string;
+}
+
+export interface VilnaHeaderGeom {
+  items: VilnaHeaderItem[];
+  perekNumber?: number;
+  perekName: string;
+  masechet: string;
+  folio: string;
+}
+
 export interface TransitionMarkerGeom {
   label: string;
   xLeft: number;
@@ -797,6 +822,8 @@ export interface PageTypesetResult {
   michtavBox?: import('../types/design-settings').CustomLayoutBox;
   /** Opening word frame around Masechet opening word(s) or Sefer opening phrase */
   openingWordBox?: OpeningWordBoxGeom;
+  /** Layout training T2.1 — Vilna running head (replaces the generic header + folio when set). */
+  vilnaHeader?: VilnaHeaderGeom;
   /** Verified Mishnah->Gemara transition markers placed visually before lines */
   transitionMarkers?: TransitionMarkerGeom[];
   /** Optional peripheral commentator/reference streams (zero width reserved when empty) */

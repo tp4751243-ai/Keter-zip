@@ -78,6 +78,7 @@ import {
 } from './custom-layout-engine';
 import { CustomLayoutBox, SemanticStyleRole } from '../types/design-settings';
 import { detectYiddish } from './yiddish-sefarim';
+import { derivePerakim, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
   ein_mishpat: { he: 'עין משפט', en: 'Ein Mishpat', patterns: [/עין\s*משפט/, /ein[_\s-]*mishpat/i] },
@@ -667,6 +668,19 @@ export class PaginationEngine {
     }
     let bodyPageCounter = 0;
 
+    // Layout training T2.1 — Vilna running head (perek name, perek number,
+    // masechta, folio on the outer corner). Opt-in per book through
+    // runningHeader.useStructuredVilnaHeader; the Vilna presets turn it on.
+    const runningHeaderCfg = designSettings?.pageElements?.runningHeader;
+    const vilnaHeaderOn = runningHeaderCfg?.useStructuredVilnaHeader === true;
+    const perakim = vilnaHeaderOn ? derivePerakim(units) : new Map<string, PerekInfo>();
+    const vilnaMasechet = vilnaHeaderOn ? resolveMasechetName(runningHeaderCfg, title) : '';
+    const vilnaHeaderSize =
+      runningHeaderCfg?.vilnaHeaderFontSizePt ?? Math.round(effectiveSourceFontSize * 1.6 * 10) / 10;
+    const vilnaHeaderFont =
+      (runningHeaderCfg?.fontFamily ?? '').trim() || effectiveSourceFontFamily || 'Frank Ruhl Libre';
+    let lastPerek: PerekInfo | undefined;
+
     for (let pIdx = 0; pIdx < doc.pages.length; pIdx++) {
       const pg = doc.pages[pIdx];
       pg.pageIndex = pIdx;
@@ -686,6 +700,27 @@ export class PaginationEngine {
           title,
           pg.headerTitle || title
         );
+
+        if (vilnaHeaderOn) {
+          // The perek of the page is the perek of its first Gemara line.
+          const firstGemara = [...pg.sourceLines]
+            .filter(l => l.role === 'main_source' && l.unitId)
+            .sort((a, b) => a.yBaseline - b.yBaseline)[0];
+          const perek = (firstGemara && perakim.get(firstGemara.unitId)) || lastPerek;
+          if (perek) lastPerek = perek;
+          pg.vilnaHeader = layoutVilnaHeader(pg, perek, {
+            masechet: vilnaMasechet,
+            perekNameOverride: runningHeaderCfg?.perekTitleText,
+            perekNumberOverride: runningHeaderCfg?.perekNumberText,
+            folioText: folioInfo.folioDisplay,
+            pageSide: spreadSide,
+            fontFamily: vilnaHeaderFont,
+            fontSizePt: vilnaHeaderSize,
+          });
+          // A Vilna daf carries no continuation notes.
+          pg.continuationHeader = undefined;
+          pg.continuationFooter = undefined;
+        }
 
         // Verified Mishnah -> Gemara boundary transition marker (`גמ׳`) without mutating rawText
         if (transCfg.enabled && pg.sourceLines.length > 0) {

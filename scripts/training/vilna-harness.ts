@@ -202,6 +202,9 @@ interface Check {
 
 const norm = (s: string) => s.replace(/[֑-ׇ]/g, '').replace(/[״"׳']/g, '').trim();
 const words = (l: PdfPageRenderPlan['lines'][number]) => l.words.map(w => w.text).join(' ');
+/** Words of a header item in reading order (right → left). */
+const itemText = (it: { words: Array<{ text: string; xRight: number }> }) =>
+  [...it.words].sort((a, b) => b.xRight - a.xRight).map(w => w.text).join(' ');
 const isSource = (r: string) => r === 'main_source' || r === 'chapter' || r === 'verse';
 const isRashi = (r: string) => r === 'primary_comment';
 const isTosafot = (r: string) => r === 'secondary_comment';
@@ -244,7 +247,7 @@ function scorePage(
 
   // H1 — running head carries perek name, perek number, masechta.
   const headerTexts = [plan.headerShowCenter ? plan.headerCenterText : '', plan.headerShowLeft ? plan.headerLeftText : '', plan.headerShowRight ? plan.headerRightText : '']
-    .concat(((plan as any).vilnaHeader?.items ?? []).map((i: any) => i.text))
+    .concat((plan.vilnaHeader?.items ?? []).map(i => itemText(i)))
     .filter(Boolean)
     .map(norm)
     .join(' | ');
@@ -258,15 +261,14 @@ function scorePage(
   });
 
   // H2 — folio label in the head, on the OUTER corner.
-  const vItems: Array<{ text: string; xLeft: number; xRight: number; role?: string }> = (plan as any).vilnaHeader?.items ?? [];
-  const folioItem = vItems.find(i => norm(i.text) === norm(folio));
+  const folioItem = (plan.vilnaHeader?.items ?? []).find(i => i.kind === 'folio');
   let folioSide: 'left' | 'right' | 'none' = 'none';
   let folioText = '';
   if (folioItem) {
     folioSide = (folioItem.xLeft + folioItem.xRight) / 2 < midX ? 'left' : 'right';
-    folioText = folioItem.text;
+    folioText = itemText(folioItem);
   } else if (plan.showFolioNumber && plan.folioNumberPosition !== 'hidden') {
-    folioText = plan.folioDisplay;
+    folioText = plan.folioDisplay ?? '';
     // Generic renderer: header slot "right" or folio positions; top_outside draws at the right margin today.
     const pos = plan.folioNumberPosition;
     folioSide =
@@ -458,7 +460,7 @@ async function main() {
       geometry,
       sourceFontSize: settings.roleStyles?.main_source?.character?.fontSizePt,
       commentaryFontSize: settings.roleStyles?.primary_comment?.character?.fontSizePt,
-      kneeSettings: settings.knee as any,
+      kneeSettings: settings.ravText?.kneeSettings,
       designSettings: settings,
     });
     console.log = origLog;

@@ -2500,7 +2500,9 @@ export class DesignSettingsEngine {
         // v0.6.0 Part A (§5): editable running-header text — empty means
         // automatic (centre = book title, right = folio, left = edition
         // label); everything on, centred, book font, header size.
-        runningHeader: { ...DEFAULT_RUNNING_HEADER_SETTINGS },
+        // Layout training T2.1 — a new Talmud (rav_text) book gets the Vilna
+        // running head (perek name, perek number, masechta, folio outside).
+        runningHeader: { ...DEFAULT_RUNNING_HEADER_SETTINGS, useStructuredVilnaHeader: layoutType === 'rav_text' },
         folioNumbering: {
           dafFormat: layoutType === 'rav_text' ? 'dots' : 'gematria',
           startDaf: layoutType === 'rav_text' ? 2 : 1,

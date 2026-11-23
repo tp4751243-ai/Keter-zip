@@ -11,6 +11,7 @@ import {
   ContentRole,
   HeaderFolioPosition,
   OpeningWordBoxGeom,
+  VilnaHeaderGeom,
   PageGeometry,
   PageTypesetResult,
   PlacedOrnament,
@@ -275,6 +276,8 @@ export interface PdfPageRenderPlan {
   ornaments: PdfOrnamentDrawCommand[];
   folioDisplay?: string;
   openingWordBox?: OpeningWordBoxGeom;
+  /** Layout training T2.1 — engine-laid-out Vilna running head (physical pt). */
+  vilnaHeader?: VilnaHeaderGeom;
   /** v0.9.9 (I2): frame stroke for the opening-word box (ravText.openingDecoration.thicknessPt). */
   openingDecorationThicknessPt?: number;
   transitionMarkers?: TransitionMarkerGeom[];
@@ -409,6 +412,18 @@ export class PdfExporter {
         ...ps,
         lines: shiftLines(ps.lines),
       })),
+      vilnaHeader: plan.vilnaHeader
+        ? {
+            ...plan.vilnaHeader,
+            items: plan.vilnaHeader.items.map(it => ({
+              ...it,
+              xLeft: it.xLeft + dx,
+              xRight: it.xRight + dx,
+              yBaseline: it.yBaseline + dy,
+              words: it.words.map(w => ({ ...w, xLeft: w.xLeft + dx, xRight: w.xRight + dx })),
+            })),
+          }
+        : undefined,
       openingWordBox: plan.openingWordBox
         ? {
             ...plan.openingWordBox,
@@ -1761,16 +1776,21 @@ export class PdfExporter {
       ),
     }));
 
+    // Layout training T2.1 — the Vilna head replaces the generic header
+    // band, the generic folio and the continuation notes entirely, so no
+    // renderer can draw any of them twice.
+    const vh = page.vilnaHeader && page.vilnaHeader.items.length > 0 ? page.vilnaHeader : undefined;
     return {
       pageNumber,
       folioDisplay: folioLabel,
       pageNumberHebrew: folioLabel,
       headerTitle: headerTitle || 'ספר קודש',
-      continuationHeader,
-      continuationFooter,
-      showRunningHeader,
+      continuationHeader: vh ? undefined : continuationHeader,
+      continuationFooter: vh ? undefined : continuationFooter,
+      showRunningHeader: vh ? false : showRunningHeader,
       showRunningFooter,
-      showFolioNumber,
+      showFolioNumber: vh ? false : showFolioNumber,
+      vilnaHeader: vh,
       pageNumberStyle,
       showDafPrefix,
       showDecorativeFrame,
@@ -1779,10 +1799,10 @@ export class PdfExporter {
       headerLeftText: resolvedHeader.left.visible ? resolvedHeader.left.text : '',
       headerCenterText: resolvedHeader.center.visible ? resolvedHeader.center.text : '',
       headerRightText: resolvedHeader.right.visible ? resolvedHeader.right.text : '',
-      headerShowLeft: showRunningHeader && resolvedHeader.left.visible,
-      headerShowCenter: showRunningHeader && resolvedHeader.center.visible,
-      headerShowRight: showRunningHeader && resolvedHeader.right.visible,
-      headerShowPageNumber: showRunningHeader && resolvedHeader.right.visible,
+      headerShowLeft: !vh && showRunningHeader && resolvedHeader.left.visible,
+      headerShowCenter: !vh && showRunningHeader && resolvedHeader.center.visible,
+      headerShowRight: !vh && showRunningHeader && resolvedHeader.right.visible,
+      headerShowPageNumber: !vh && showRunningHeader && resolvedHeader.right.visible,
       headerAlignment: resolvedHeader.alignment,
       headerFontFamily: resolvedHeader.fontFamily,
       headerFontSizePt: resolvedHeader.fontSizePt,
@@ -2476,6 +2496,19 @@ export class PdfExporter {
       }
     }
 
+    // Layout training T2.1 — Vilna running head: every word was measured
+    // and placed by the engine; draw it exactly there (right-aligned at
+    // its xRight, RTL), never re-measured or re-packed.
+    if (renderPlan.vilnaHeader) {
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#1E1C1A';
+      for (const it of renderPlan.vilnaHeader.items) {
+        ctx.font = `${it.fontWeight} ${this.ptInCanvasSpace(it.fontSizePt)}px "${it.fontFamily}", "Frank Ruhl Libre", "Noto Serif Hebrew", serif`;
+        for (const w of it.words) ctx.fillText(w.text, w.xRight, it.yBaseline);
+      }
+    }
+
     // 4. Layout-Specific Decorative Rules (Two-Column / Top-Bottom)
     if (layoutType === 'two_column' && column2Lines && column2Lines.length > 0) {
       const colGutter = page.designSettings?.columns?.columnGapPt ?? 16.0;
@@ -2930,6 +2963,25 @@ export class PdfExporter {
         drawHeaderOrFolioPhrase(folioLabel, inside.align, inside.x, mTop - 18, hdrFontPt, true, '#2C2A29');
       } else {
         drawHeaderOrFolioPhrase(folioLabel, 'right', mRight, mTop - 18, hdrFontPt, true, '#2C2A29');
+      }
+    }
+
+    // Layout training T2.1 — Vilna running head (engine-placed words).
+    if (renderPlan.vilnaHeader) {
+      for (const it of renderPlan.vilnaHeader.items) {
+        for (const w of it.words) {
+          PdfNativeTextEngine.drawNativeWord(doc, {
+            text: w.text,
+            xLeft: w.xLeft,
+            xRight: w.xRight,
+            yBaseline: it.yBaseline,
+            pageHeight: mediaH,
+            fontFamily: it.fontFamily,
+            fontSizePt: it.fontSizePt,
+            isBold: it.fontWeight >= 600,
+            textColorHex: g('#1E1C1A'),
+          });
+        }
       }
     }
 

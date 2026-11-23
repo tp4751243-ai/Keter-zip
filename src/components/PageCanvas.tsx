@@ -361,6 +361,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
     activeLinks,
     continuationHeader,
     continuationFooter,
+    vilnaHeader,
   } = typesetResult;
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -2405,7 +2406,36 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                 text — the band itself stays inside the top margin, so it
                 never overlaps the text. v0.5.0 (Title Page): never on a
                 title page. */}
-            {showHeaderBand && !isTitlePage && (
+            {/* Layout training T2.1 — Vilna running head. The engine laid
+                out every word (physical pt, text block starting at
+                marginInside); the screen's content area starts at
+                marginOut, so x is mapped through the content-relative
+                offset. Replaces the generic band, folio and footer. */}
+            {vilnaHeader && !isTitlePage &&
+              vilnaHeader.items.flatMap((it, ii) =>
+                it.words.map((w, wi) => (
+                  <span
+                    key={`vh-${ii}-${wi}`}
+                    data-testid={it.kind === 'folio' ? 'vilna-header-folio' : 'vilna-header-title'}
+                    className="absolute pointer-events-none text-[#1E1C1A] whitespace-nowrap"
+                    style={{
+                      left: `${(w.xLeft - geometry.marginInside) * scale + marginOut}px`,
+                      width: `${(w.xRight - w.xLeft) * scale}px`,
+                      top: `${(it.yBaseline - it.fontSizePt * 0.82) * scale}px`,
+                      fontSize: `${it.fontSizePt * scale}px`,
+                      lineHeight: 1,
+                      fontWeight: it.fontWeight,
+                      fontFamily: `"${it.fontFamily}", "Frank Ruhl Libre", serif`,
+                      direction: 'rtl',
+                      textAlign: 'right',
+                    }}
+                  >
+                    {w.text}
+                  </span>
+                ))
+              )}
+
+            {showHeaderBand && !isTitlePage && !vilnaHeader && (
               <div
                 className={`absolute flex items-end pb-1 text-[#1E1C1A] ${
                   showTopHeaderLine && showHeaderDividerRule ? 'border-b-2 border-[#2A2622]/75' : ''
@@ -2490,7 +2520,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
             {/* v0.5.0 (integrator — user request): off by default on fresh
                 books; the user turns them on ("Show commentary labels").
                 v0.5.0 (Title Page): never on a title page. */}
-            {showCommentaryLabels && !isTitlePage && (layoutType === 'rav_text' || layoutType === 'mikraot_gedolot') && (
+            {showCommentaryLabels && !isTitlePage && !vilnaHeader && (layoutType === 'rav_text' || layoutType === 'mikraot_gedolot') && (
               <div
                 className="absolute flex justify-between pointer-events-none text-[#5C5346] font-bold"
                 style={{
@@ -3446,7 +3476,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
 
             {/* Traditional Bottom Catchword / Page Footer */}
             {/* v0.5.0 (Title Page): never on a title page. */}
-            {!isTitlePage && typesetResult.designSettings?.pageLayout?.showRunningFooter !== false && (
+            {!isTitlePage && !vilnaHeader && typesetResult.designSettings?.pageLayout?.showRunningFooter !== false && (
               <div
                 className="absolute flex items-center justify-between text-[#5C5346]"
                 style={{
