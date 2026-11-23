@@ -59,6 +59,12 @@ export interface RavTextLayoutInput {
    *  exact mirror image of a recto page. */
   mirrorFlanks?: boolean;
   /**
+   * Layout training T2.2 — height (pt) kept free at the TOP OF THE GEMARA
+   * COLUMN only (the masechta opening frame). The commentaries still start
+   * at the top and run beside the reserve; the Gemara starts below it.
+   */
+  sourceTopReservePt?: number;
+  /**
    * v0.8.0 Part C (§2): internal — explicit Rashi share for the swapped
    * (verso) solve. The tier share is role-based, so the swapped solve
    * must use 1 − share (its "rashi" slot holds Tosafot content); without
@@ -878,7 +884,23 @@ export class DynamicKneeEngine {
     curTosafotY = Math.max(curTosafotY, upperKneeLines > 0 ? upperKneeHeight + commentAscent - 0.5 : commentAscent);
     // Set gemaraStartY so that the first Source line's yTop (`curSourceY - sourceAscent`) is strictly >= `upperKneeHeight + 4pt`
     // and aligns immediately with the next commentary line after the top wrap!
-    const gemaraStartY = actualUpperKneeLines > 0 ? upperKneeHeight + 4.0 : 0;
+    const gemaraStartY =
+      (actualUpperKneeLines > 0 ? upperKneeHeight + 4.0 : 0) + Math.max(0, input.sourceTopReservePt ?? 0);
+    // Layout training T2.2 — the opening-frame reserve is a real obstacle:
+    // registered over the Gemara column only, so the commentaries keep
+    // flowing beside it (Vilna 2a: Rashi and Tosafot run alongside the
+    // frame) instead of seeing one full-width free strip and skipping it.
+    const sourceTopReservePt = Math.max(0, input.sourceTopReservePt ?? 0);
+    if (sourceTopReservePt > 0) {
+      spatial.registerRegion({
+        id: 'opening-frame-reserve',
+        role: 'ornament',
+        xLeft: hasTosafot ? defaultTosafotWidth + gutter : 0,
+        xRight: hasRashi ? contentWidth - defaultRashiWidth - gutter : contentWidth,
+        yTop: gemaraStartY - sourceTopReservePt,
+        yBottom: gemaraStartY,
+      });
+    }
 
     // Stage 21G: Verified Commentary Clearance Solver:
     // Calculate the actual geometric vertical clearance needed for commentary to wrap beneath the central Gemara column.

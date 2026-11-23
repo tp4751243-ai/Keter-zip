@@ -560,8 +560,21 @@ export function applyRecipeToSettingsById(
     return DesignSettingsEngine.updateLayoutSettings(
       settings, { layoutType: recipe.baseLayout ?? 'rav_text' }, 'ai');
   }
-  return applyGenreTypography(resolvedId, next);
+  next = applyGenreTypography(resolvedId, next);
+  // Layout training T2.3 — a Vilna-family folio is laid out by the real
+  // Tzuras HaDaf engine (rav_text: stepped knee, Rashi inner / Tosafot
+  // outer mirrored per amud, running head, opening frame), not by the
+  // recipe's fixed rectangles. The rectangles cannot step around the
+  // Gemara or mirror per amud, which the training harness measured as
+  // 1.75× the Vilna page count and Rashi on the wrong side of 4/7 pages.
+  if (VILNA_KNEE_RECIPES.has(resolvedId)) {
+    next = DesignSettingsEngine.updateLayoutSettings(next, { layoutType: 'rav_text' }, 'ai');
+  }
+  return next;
 }
+
+/** Recipes whose page is a Vilna Tzuras HaDaf (laid out by the rav_text knee engine). */
+export const VILNA_KNEE_RECIPES: ReadonlySet<string> = new Set(['talmud-bavli', 'vilna-shas', 'shas-oz-vehadar']);
 
 /** Stated fallback layouts (plain layout types, not recipes). */
 const FALLBACK_RECIPES: ReadonlyArray<HistoricalRecipe> = Object.freeze([

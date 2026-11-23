@@ -78,6 +78,7 @@ import {
 } from './custom-layout-engine';
 import { CustomLayoutBox, SemanticStyleRole } from '../types/design-settings';
 import { detectYiddish } from './yiddish-sefarim';
+import { extractOpeningWord, openingFrameGeometry } from './vilna-opening-frame';
 import { derivePerakim, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
@@ -230,7 +231,18 @@ export class PaginationEngine {
       marginOutside: 42,
       isVerso: false,
     };
-    const units: ContentUnit[] = rawUnits ?? [];
+    // Layout training T2.2 — Vilna opening frame: on a Talmud folio the
+    // masechta's first word moves out of the running text into the frame
+    // (the knee solver reserves the frame's space on the first page).
+    const openingCfgEarly = {
+      ...DEFAULT_OPENING_DECORATION,
+      ...(input.designSettings?.ravText?.openingDecoration ?? {}),
+    };
+    const openingExtract =
+      layoutType === 'rav_text' && openingCfgEarly.enabled && openingCfgEarly.styleId !== 'none'
+        ? extractOpeningWord(rawUnits ?? [], openingCfgEarly.wordCount ?? 1)
+        : null;
+    const units: ContentUnit[] = openingExtract?.units ?? rawUnits ?? [];
 
     const designSettings = input.designSettings;
     const effectiveSourceFontSize =
@@ -815,6 +827,34 @@ export class PaginationEngine {
           firstSourceUnitId !== undefined &&
           chapterStartUnitIds.has(firstSourceUnitId) &&
           !emittedChapterStartUnitIds.has(firstSourceUnitId);
+        if (pg.openingFrameReserved && openingExtract && !pg.openingWordBox) {
+          // Space was reserved by the knee solver: place the frame in it,
+          // centred on the Gemara column, never moving any line.
+          const top = [...pg.sourceLines]
+            .filter(l => l.role === 'main_source')
+            .sort((a, b) => a.yBaseline - b.yBaseline)
+            .slice(0, 3);
+          if (top.length > 0) {
+            const fr = pg.openingFrameReserved;
+            const pgContentW = pg.geometry.pageWidth - pg.geometry.marginInside - pg.geometry.marginOutside;
+            const colLeft = Math.min(...top.map(l => l.xLeft ?? 0));
+            const colRight = Math.max(...top.map(l => l.xRight ?? pgContentW));
+            const boxW = Math.max(44, (colRight - colLeft) * fr.widthRatio);
+            const centre = (colLeft + colRight) / 2;
+            const firstTop = top[0].yTop ?? top[0].yBaseline - top[0].ascent;
+            const yBottom = firstTop - fr.gapBelowPt;
+            pg.openingWordBox = {
+              xLeft: centre - boxW / 2,
+              xRight: centre + boxW / 2,
+              yTop: Math.max(0, yBottom - fr.boxHeightPt),
+              yBottom,
+              text: (openCfg.customWordText ?? '').trim() || openingExtract.text,
+              styleId: openCfg.styleId,
+              unitId: openingExtract.unitId,
+              isCentered: true,
+            };
+          }
+        }
         if ((bIdx === 0 || isChapterStartPage) && openCfg.enabled && openCfg.styleId !== 'none' && !pg.openingWordBox && pg.sourceLines.length > 0) {
           if (isChapterStartPage && firstSourceUnitId) emittedChapterStartUnitIds.add(firstSourceUnitId);
           const anchorLine =
@@ -4002,7 +4042,17 @@ export class PaginationEngine {
       // reserved in the solver geometry on page 0 and the solved lines are
       // shifted down by the same amount just before the band/footnote
       // placement below.
-      const michtavEnabled = designSettings?.ravText?.michtavEnabled === true;
+      // Layout training T2.2 — the opening frame supersedes the Michtav
+      // strip: a Vilna first page has the framed word in the Gemara
+      // column, not a full-width title band.
+      const openingCfgRav = {
+        ...DEFAULT_OPENING_DECORATION,
+        ...(designSettings?.ravText?.openingDecoration ?? {}),
+      };
+      const openingFrameOn = openingCfgRav.enabled && openingCfgRav.styleId !== 'none';
+      const openingFrame = openingFrameOn ? openingFrameGeometry(sourceFontSize) : null;
+      const openingReserveFor = (pageIdx: number): number => (pageIdx === 0 && openingFrame ? openingFrame.reservePt : 0);
+      const michtavEnabled = designSettings?.ravText?.michtavEnabled === true && !openingFrameOn;
 
       let sCursor = 0;
       let rCursor = 0;
@@ -4141,6 +4191,7 @@ export class PaginationEngine {
             sourceShapedWords: candSourceShaped,
             rashiShapedWords: candRashiShaped,
             tosafotShapedWords: candTosafotShaped,
+            sourceTopReservePt: openingReserveFor(p),
             sourceUnitId: candSourceShaped[0]?.unitId ?? `src-p${p}`,
             rashiUnitId: candRashiShaped[0]?.unitId ?? `rashi-p${p}`,
             tosafotUnitId: candTosafotShaped[0]?.unitId ?? `tosafot-p${p}`,
@@ -4481,6 +4532,7 @@ export class PaginationEngine {
         sourceShapedWords: pSourceShaped,
         rashiShapedWords: pRashiShaped,
         tosafotShapedWords: pTosafotShaped,
+        sourceTopReservePt: openingReserveFor(p),
         sourceUnitId: pSourceShaped[0]?.unitId ?? `src-p${p}`,
         rashiUnitId: pRashiShaped[0]?.unitId ?? `rashi-p${p}`,
         tosafotUnitId: pTosafotShaped[0]?.unitId ?? `tosafot-p${p}`,
@@ -4718,6 +4770,7 @@ export class PaginationEngine {
           sourceShapedWords: pSourceShaped,
           rashiShapedWords: pRashiShaped,
           tosafotShapedWords: pTosafotShaped,
+          sourceTopReservePt: openingReserveFor(p),
           sourceUnitId: pSourceShaped[0]?.unitId ?? `src-p${p}`,
           rashiUnitId: pRashiShaped[0]?.unitId ?? `rashi-p${p}`,
           tosafotUnitId: pTosafotShaped[0]?.unitId ?? `tosafot-p${p}`,
@@ -4813,6 +4866,7 @@ export class PaginationEngine {
           sourceShapedWords: pSourceShaped,
           rashiShapedWords: pRashiShaped,
           tosafotShapedWords: pTosafotShaped,
+          sourceTopReservePt: openingReserveFor(p),
           sourceUnitId: pSourceShaped[0]?.unitId ?? `src-p${p}`,
           rashiUnitId: pRashiShaped[0]?.unitId ?? `rashi-p${p}`,
           tosafotUnitId: pTosafotShaped[0]?.unitId ?? `tosafot-p${p}`,
@@ -5147,6 +5201,10 @@ export class PaginationEngine {
         // v0.8.0 Part C (§1/§7): tertiary band + Michtav box (page 0 only).
         tertiaryLines: terLines,
         michtavBox,
+        openingFrameReserved:
+          openingReserveFor(p) > 0 && openingFrame
+            ? { boxHeightPt: openingFrame.boxHeightPt, gapBelowPt: openingFrame.gapBelowPt, widthRatio: openingFrame.widthRatio }
+            : undefined,
         knee: res.knee,
         occupiedRegions: res.occupiedRegions,
         layoutScore: res.layoutScore,

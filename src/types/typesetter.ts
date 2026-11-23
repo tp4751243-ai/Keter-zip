@@ -824,6 +824,12 @@ export interface PageTypesetResult {
   openingWordBox?: OpeningWordBoxGeom;
   /** Layout training T2.1 — Vilna running head (replaces the generic header + folio when set). */
   vilnaHeader?: VilnaHeaderGeom;
+  /**
+   * Layout training T2.2 — set on the page where the knee solver reserved
+   * the opening frame's space at the top of the Gemara column; the frame
+   * is then placed in that space (never by shifting lines).
+   */
+  openingFrameReserved?: { boxHeightPt: number; gapBelowPt: number; widthRatio: number };
   /** Verified Mishnah->Gemara transition markers placed visually before lines */
   transitionMarkers?: TransitionMarkerGeom[];
   /** Optional peripheral commentator/reference streams (zero width reserved when empty) */

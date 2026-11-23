@@ -2543,7 +2543,9 @@ export class DesignSettingsEngine {
         // v0.8.0 Part C (§7): Michtav box off by default.
         michtavEnabled: false,
         michtavText: '',
-        openingDecoration: { ...DEFAULT_OPENING_DECORATION },
+        // Layout training T2.2 — a new Talmud book opens with the framed
+        // first word (the Vilna masechta opening).
+        openingDecoration: { ...DEFAULT_OPENING_DECORATION, enabled: layoutType === 'rav_text' },
         commentarySeparator: { ...DEFAULT_COMMENTARY_SEPARATOR },
         paragraphSeparator: { ...DEFAULT_PARAGRAPH_SEPARATOR },
         transitionMarker: { ...DEFAULT_TRANSITION_MARKER },

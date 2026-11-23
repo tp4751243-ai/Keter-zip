@@ -1,19 +1,19 @@
 # Vilna scorecard — Berakhot (rav_text)
 
-Layout type: `rav_text` · pages: 13 · **score 73%** (85/117 scored checks)
+Layout type: `rav_text` · pages: 13 · **score 74%** (86/117 scored checks)
 
 | Rule | Pass | Fail |
 |---|---|---|
 | D1 Density: page count vs Vilna (4) | 0 | 1 |
 | H1 Running head: perek name + פרק N + masechta | 13 | 0 |
 | H2 Folio ב. on the outer (left) corner | 13 | 0 |
-| F1 Opening frame around the first word (first daf) | 0 | 1 |
+| F1 Opening frame around the first word (first daf) | 1 | 0 |
 | R1 Rashi inner (right), Tosafot outer (left) | 13 | 0 |
 | M1 Marginal apparatus (Ein Mishpat / Torah Or / Gilyon) as side columns | 0 | 13 |
 | T1 `גמ׳` marker: one per Mishna→Gemara boundary | 0 | 0 |
 | L1 Gemara/commentary size ratio 1.25–1.45 | 13 | 0 |
-| L2 Even justification (p95 word gap ≤ 0.6 em) | 2 | 11 |
-| P1 Page filled to the bottom margin (≥ 95%) | 6 | 6 |
+| L2 Even justification (p95 word gap ≤ 0.6 em) | 1 | 12 |
+| P1 Page filled to the bottom margin (≥ 95%) | 7 | 5 |
 | P2 No overlapping lines, nothing off the page | 13 | 0 |
 | A1 Gemara amudim on this page (Vilna: exactly one) | 0 | 0 |
 | F2 No opening frame on later pages | 12 | 0 |
@@ -26,15 +26,15 @@ Layout type: `rav_text` · pages: 13 · **score 73%** (85/117 scored checks)
 
 - ✅ **H1** Running head: perek name + פרק N + masechta — header="מאימתי פרק ראשון ברכות | ב."
 - ✅ **H2** Folio ב. on the outer (left) corner — drawn "ב." on left
-- ❌ **F1** Opening frame around the first word (first daf) — no frame
+- ✅ **F1** Opening frame around the first word (first daf) — "מאימתי"
 - ✅ **R1** Rashi inner (right), Tosafot outer (left) — Rashi median x on right, Tosafot on left
 - ❌ **M1** Marginal apparatus (Ein Mishpat / Torah Or / Gilyon) as side columns — 1 peripheral blocks (ein_mishpat), 0 as side columns
 - ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 0 literal "גמ׳" words on page
 - ✅ **L1** Gemara/commentary size ratio 1.25–1.45 — 14.5pt / 10.5pt = 1.38
-- ✅ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.32 em, p95 0.32 em over 1 lines
-- ✅ **P1** Page filled to the bottom margin (≥ 95%) — 97% of the text block used
+- ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.69 em, p95 0.69 em over 1 lines
+- ✅ **P1** Page filled to the bottom margin (≥ 95%) — 99% of the text block used
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
-- ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2a:2 lines
+- ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2a:1 lines
 
 ## Page 2 (ב:)
 
@@ -43,12 +43,12 @@ Layout type: `rav_text` · pages: 13 · **score 73%** (85/117 scored checks)
 - ✅ **F2** No opening frame on later pages — none
 - ✅ **R1** Rashi inner (left), Tosafot outer (right) — Rashi median x on left, Tosafot on right
 - ❌ **M1** Marginal apparatus (Ein Mishpat / Torah Or / Gilyon) as side columns — 1 peripheral blocks (ein_mishpat), 0 as side columns
-- ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 1 engine markers + 1 literal "גמ׳" words on page
+- ℹ️ **T1** `גמ׳` marker: one per Mishna→Gemara boundary — 0 engine markers + 1 literal "גמ׳" words on page
 - ✅ **L1** Gemara/commentary size ratio 1.25–1.45 — 14.5pt / 10.5pt = 1.38
-- ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.50 em, p95 1.39 em over 8 lines
-- ❌ **P1** Page filled to the bottom margin (≥ 95%) — 86% of the text block used
+- ❌ **L2** Even justification (p95 word gap ≤ 0.6 em) — median 0.41 em, p95 1.35 em over 11 lines
+- ✅ **P1** Page filled to the bottom margin (≥ 95%) — 96% of the text block used
 - ✅ **P2** No overlapping lines, nothing off the page — 0 overlapping line pairs, 0 lines off the page
-- ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2a:16 lines
+- ℹ️ **A1** Gemara amudim on this page (Vilna: exactly one) — 2a:18 lines
 
 ## Page 3 (ג.)
 

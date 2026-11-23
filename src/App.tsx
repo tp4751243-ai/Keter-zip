@@ -1649,7 +1649,9 @@ export default function App() {
           'user'
         );
         newSnapshot.designSettings = applyRecipeToSettingsById(chosenRecipeId, switched);
-        newSnapshot.layoutType = 'custom_layout';
+        // Layout training T2.3 — the recipe decides the layout type
+        // (Vilna-family recipes land on the rav_text knee engine).
+        newSnapshot.layoutType = newSnapshot.designSettings.layout.layoutType;
         newSnapshot.geometry = {
           ...newSnapshot.designSettings.pageLayout.geometry,
         };

@@ -55,7 +55,7 @@
 import type { ContentRole, ContentUnit, PageTypesetResult, RavTextLink, TierConfig } from '../types/typesetter';
 import type { CustomLayoutBox, ProfessionalDesignSettings } from '../types/design-settings';
 import { DesignSettingsEngine } from './design-settings-engine';
-import { DEFAULT_RUNNING_HEADER_SETTINGS } from '../types/design-settings';
+import { DEFAULT_OPENING_DECORATION, DEFAULT_RUNNING_HEADER_SETTINGS } from '../types/design-settings';
 import type { LocalRuleOverride } from './typesetting-rules-engine';
 
 /**
@@ -840,7 +840,21 @@ export function applyVilnaShasDefaults(settings: ProfessionalDesignSettings): Pr
   next = DesignSettingsEngine.updateRavTextSettings(next, { dibburHamatchilBold: true }, 'user');
   // v0.8.0 Part C (§7): Vilna defaults also switch the centred decorative
   // Michtav box on for the first daf (toggleable in the design panel).
-  next = DesignSettingsEngine.updateRavTextSettings(next, { michtavEnabled: true }, 'user');
+  // Layout training T2.2 — the Vilna opening is the framed first word in
+  // the Gemara column (the full-width Michtav strip is not Vilna).
+  next = DesignSettingsEngine.updateRavTextSettings(
+    next,
+    {
+      michtavEnabled: false,
+      openingDecoration: {
+        ...DEFAULT_OPENING_DECORATION,
+        ...(next.ravText?.openingDecoration ?? {}),
+        enabled: true,
+        scope: 'masechet_start',
+      },
+    },
+    'user'
+  );
   // Layout training T2.1 — the Vilna running head (perek name, perek
   // number, masechta; folio on the outer corner).
   next = DesignSettingsEngine.updatePageElementsSettings(
