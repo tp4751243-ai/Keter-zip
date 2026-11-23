@@ -9,9 +9,10 @@
  * for an RTL paragraph:
  *  - a word with a Latin (strong L) letter is LTR; a word with a Hebrew
  *    letter is RTL; digits and punctuation are weak / neutral;
- *  - weak and neutral words BETWEEN two LTR words take the LTR direction
- *    (rules W7 / N1), so "Isaiah 40:1" is one LTR run, while a number
- *    standing between Hebrew words stays in the RTL flow;
+ *  - a number after a Latin word (no Hebrew between) is LTR (rule W7),
+ *    and neutrals BETWEEN two LTR words are LTR (N1): "Isaiah 40:1" is
+ *    one LTR run, while a number between Hebrew words stays in the RTL
+ *    flow;
  *  - an LTR run is placed left-to-right, i.e. its words reversed in the
  *    right-to-left placement order.
  * Characters inside a word are ordered by the text engine itself.
@@ -36,6 +37,13 @@ export function rtlPlacementOrder(texts: string[]): number[] {
   const n = texts.length;
   const order = texts.map((_, i) => i);
   const dirs = texts.map(wordDirection);
+  // W7: a number whose nearest preceding strong word is Latin is LTR
+  // ("Isaiah 40:1"); after Hebrew (or at the line start) it stays RTL flow.
+  let lastStrong: WordDir = 'R';
+  for (let k = 0; k < n; k++) {
+    if (dirs[k] === 'L' || dirs[k] === 'R') lastStrong = dirs[k];
+    else if (/[0-9]/.test(texts[k]) && lastStrong === 'L') dirs[k] = 'L';
+  }
   let i = 0;
   while (i < n) {
     if (dirs[i] !== 'L') {

@@ -379,13 +379,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
 
           {showIdmlMenu && (
-            <div className="absolute left-0 mt-1.5 w-76 bg-[#131B2B] border border-slate-700 shadow-2xl rounded-lg py-1.5 z-50 text-slate-200 text-xs">
+            <div className="absolute inset-e-0 mt-1.5 w-76 bg-[#131B2B] border border-slate-700 shadow-2xl rounded-lg py-1.5 z-50 text-slate-200 text-xs">
               <button
                 onClick={() => {
                   setShowIdmlMenu(false);
                   onExportIdml('test_f_true_rav_text_flow');
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between font-semibold text-[#E6C665]"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between font-semibold text-[#E6C665]"
               >
                 <span>{t("חבילת IDML מלאה — זרימת רב-טקסט (")}{totalPages}  {t("עמ׳)")}</span>
                 <span className="text-[10px] text-slate-400 font-mono">InDesign</span>
@@ -400,7 +400,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   setShowIdmlMenu(false);
                   onExportIdml('test_a_minimal');
                 }}
-                className="w-full text-right px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
+                className="w-full text-start px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
               >
                 <span>{t("תבנית א׳: מסגרת טקסט בסיסית (מסכת ברכות)")}</span>
                 <span className="text-[10px] text-slate-500 font-mono">1 Frame</span>
@@ -410,7 +410,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   setShowIdmlMenu(false);
                   onExportIdml('test_b_styled_lines');
                 }}
-                className="w-full text-right px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
+                className="w-full text-start px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
               >
                 <span>{t("תבנית ב׳: עמוד מקור עם הדגשת דיבור המתחיל")}</span>
                 <span className="text-[10px] text-slate-500 font-mono">Styled</span>
@@ -420,7 +420,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   setShowIdmlMenu(false);
                   onExportIdml('test_c_rav_text');
                 }}
-                className="w-full text-right px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
+                className="w-full text-start px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
               >
                 <span>{t("תבנית ג׳: עמוד רב-טקסט משולש (3 מסגרות)")}</span>
                 <span className="text-[10px] text-slate-500 font-mono">3 Frames</span>
@@ -430,7 +430,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   setShowIdmlMenu(false);
                   onExportIdml('test_d_multi_page');
                 }}
-                className="w-full text-right px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
+                className="w-full text-start px-3.5 py-1.5 hover:bg-slate-800/80 flex items-center justify-between text-slate-300"
               >
                 <span>{t("תבנית ד׳: זרימה רב-עמודית משורשרת")}</span>
                 <span className="text-[10px] text-slate-500 font-mono">Threaded</span>
@@ -452,13 +452,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
 
           {showPdfMenu && (
-            <div className="absolute left-0 mt-1.5 w-60 bg-[#131B2B] border border-slate-700 rounded-lg shadow-2xl py-1.5 z-50 text-slate-200 text-xs">
+            <div className="absolute inset-e-0 mt-1.5 w-60 bg-[#131B2B] border border-slate-700 rounded-lg shadow-2xl py-1.5 z-50 text-slate-200 text-xs">
               <button
                 onClick={() => {
                   setShowPdfMenu(false);
                   onExportPdf(true);
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between font-medium"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between font-medium"
               >
                 <span>{t("הפקת הספר המלא (")}{totalPages}  {t("עמ׳)")}</span>
                 <span className="text-[10px] text-[#E6C665] font-mono">300 DPI</span>
@@ -468,7 +468,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   setShowPdfMenu(false);
                   onExportPdf(false);
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between border-t border-slate-800"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between border-t border-slate-800"
               >
                 <span>{t("הפקת העמוד הנוכחי (עמ׳")} {currentPage})</span>
                 <span className="text-[10px] text-slate-400 font-mono">{t("עמוד 1")}</span>

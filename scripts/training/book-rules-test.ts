@@ -12,6 +12,9 @@ import { fontLacksTeamim, wordHasTeamim } from '../../src/engine/font-analyzer';
 import { hebrewNumeral } from '../../src/engine/hebrew-numerals';
 import { hebrewLetterNumber } from '../../src/engine/layout-extras';
 import { PdfExporter } from '../../src/engine/pdf-exporter';
+import { rtlPlacementOrder } from '../../src/engine/bidi-runs';
+import { TypesetterEngine } from '../../src/engine/typesetter-core';
+import type { ContentUnit, PageTypesetResult } from '../../src/types/typesetter';
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = '') => {
@@ -66,6 +69,22 @@ for (const [n, want] of [[1, 'א׳'], [15, 'ט״ו'], [16, 'ט״ז'], [115, 'ק�
   check(`gematria ${n} = ${want}`, hebrewNumeral(n) === want, hebrewNumeral(n));
 }
 check('folio, daf and paragraph numbers agree (115)', PdfExporter.toHebrewGematria(115) === 'קט״ו' && hebrewLetterNumber(115) === 'קטו');
+
+// Mixed Hebrew / Latin word order (UAX #9 at word level).
+const ord = (t: string) => rtlPlacementOrder(t.split(' ')).map(i => t.split(' ')[i]).join(' ');
+check('Latin run placed left-to-right', ord('ראה Isaiah 40:1 שם') === 'ראה 40:1 Isaiah שם', ord('ראה Isaiah 40:1 שם'));
+check('a number between Hebrew words stays in RTL flow', ord('דף 12 עמוד 3') === 'דף 12 עמוד 3');
+check('two Latin words', ord('כמו New York כאן') === 'כמו York New כאן');
+check('pure Hebrew unchanged', ord('בראשית ברא אלהים') === 'בראשית ברא אלהים');
+{
+  const eng = new TypesetterEngine(12);
+  const lines = eng.typesetContentUnit({ id: 'b', role: 'regular_paragraph', rawText: 'ראה Isaiah 40:1 שם', styleName: '', order: 0, hierarchyLevel: 0 } as ContentUnit, 400, 16, false);
+  const page = { pageIndex: 0, pageNumber: 1, pageNumberHebrew: 'א', headerTitle: '', layoutType: 'single_column', geometry: { pageWidth: 500, pageHeight: 700, marginTop: 40, marginBottom: 40, marginInside: 40, marginOutside: 40, isVerso: false },
+    sourceLines: lines.map(l => ({ ...l, yBaseline: 20, xLeft: 0, xRight: 420 })), rashiLines: [], tosafotLines: [], footnoteLines: [], knee: {} } as unknown as PageTypesetResult;
+  const ws = PdfExporter.buildPageRenderPlan(page).lines[0]?.words ?? [];
+  const x = (t: string) => ws.find(w => w.text === t)?.xLeft ?? NaN;
+  check('print plan draws "Isaiah 40:1" left to right', x('Isaiah') < x('40:1') && x('40:1') < x('ראה') && x('שם') < x('Isaiah'), ws.map(w => `${w.text}@${w.xLeft.toFixed(0)}`).join(' '));
+}
 
 console.log(fails ? `${fails} FAILED` : 'all book rules pass');
 process.exit(fails ? 1 : 0);

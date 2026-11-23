@@ -66,6 +66,7 @@ import {
   blockInfoForUnit as buildBlockInfoForUnit,
   unionBlockBoxPx,
 } from '../engine/block-highlight';
+import { rtlPlacementOrder } from '../engine/bidi-runs';
 
 interface PageCanvasProps {
   // v0.8.1 — white-screen fix: optional + guarded below. An empty book
@@ -1721,6 +1722,17 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
         : selectedFont);
 
     const nonSpaceWords = line.words.filter(w => !w.isSpace);
+    // Layout training T11 — an embedded Latin run (UAX #9) is placed left
+    // to right: CSS order changes only where a word is DRAWN; its index
+    // (used by editing) stays logical.
+    const placementRank: number[] | null = nonSpaceWords.some(w => /[A-Za-z]/.test(w.text))
+      ? (() => {
+          const ord = rtlPlacementOrder(nonSpaceWords.map(w => w.text));
+          const rank: number[] = [];
+          ord.forEach((wi, k) => { rank[wi] = k; });
+          return rank;
+        })()
+      : null;
     const isRashiRole = line.role === 'primary_comment';
     const isTosafotRole = line.role === 'secondary_comment';
 
@@ -1887,7 +1899,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                 } ${tmCfg?.style === 'boxed' ? 'border border-[#1E1B18] rounded-sm px-1 bg-[#FCFAF5]' : ''}`}
                 style={{
                   fontSize: `${markerSizePx}px`,
-                  order: tmCfg?.position === 'after_last_word' ? 1 : -1,
+                  order: tmCfg?.position === 'after_last_word' ? nonSpaceWords.length + 1 : -1,
                 }}
               >
                 {line.transitionMarkerBefore}
@@ -2146,6 +2158,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                   }
                 }}
                 style={{
+                  order: placementRank ? placementRank[wIdx] : undefined,
                   fontFamily: wordFontFamily,
                   fontSize: wordFontSizePx ? `${wordFontSizePx}px` : undefined,
                   fontWeight: isBoldWord ? 700 : word.fontWeight ?? line.fontWeight ?? 400,

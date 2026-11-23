@@ -128,7 +128,7 @@ export const PageNavigatorSidebar: React.FC<PageNavigatorSidebarProps> = ({
     <aside
       dir={dir}
       style={{ width: `${widthPx}px` }}
-      className="h-full min-h-0 bg-[var(--ui-surface)] border-l border-[var(--ui-border)] flex flex-col shrink-0 z-30 select-none overflow-hidden shadow-[var(--ui-floating-shadow)] transition-colors duration-150"
+      className="h-full min-h-0 bg-[var(--ui-surface)] border-e border-[var(--ui-border)] flex flex-col shrink-0 z-30 select-none overflow-hidden shadow-[var(--ui-floating-shadow)] transition-colors duration-150"
     >
       {/* Top Panel Header */}
       <div className="h-11 px-4 bg-[var(--ui-surface)] border-b border-[var(--ui-border)] flex items-center justify-between shrink-0">
@@ -544,13 +544,13 @@ export const PageNavigatorSidebar: React.FC<PageNavigatorSidebarProps> = ({
             </div>
 
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[var(--ui-text-muted)] absolute right-2.5 top-2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-[var(--ui-text-muted)] absolute inset-s-2.5 top-2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={t("חיפוש מילה או דיבור המתחיל...")}
-                className="w-full bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg pr-8 pl-2.5 py-1.5 text-xs text-[var(--ui-text-primary)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:border-[var(--ui-accent)]"
+                className="w-full bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg ps-8 pe-2.5 py-1.5 text-xs text-[var(--ui-text-primary)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:border-[var(--ui-accent)]"
               />
             </div>
 

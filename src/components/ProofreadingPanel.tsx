@@ -34,7 +34,7 @@ export const ProofreadingPanel: React.FC<ProofreadingPanelProps> = ({
   return (
     <div
       dir={dir}
-      className="fixed bottom-11 left-5 w-[28rem] max-w-[calc(100vw-2.5rem)] max-h-[70vh] flex flex-col bg-[var(--ui-surface)] border border-[var(--ui-border)] shadow-[var(--ui-floating-shadow)] rounded-xl z-50 overflow-hidden text-[var(--ui-text-primary)]"
+      className="fixed bottom-11 inset-e-5 w-[28rem] max-w-[calc(100vw-2.5rem)] max-h-[70vh] flex flex-col bg-[var(--ui-surface)] border border-[var(--ui-border)] shadow-[var(--ui-floating-shadow)] rounded-xl z-50 overflow-hidden text-[var(--ui-text-primary)]"
     >
       {/* Header */}
       <div className="h-10 shrink-0 bg-[var(--ui-surface-subtle)] border-b border-[var(--ui-border)] flex items-center justify-between px-3.5">

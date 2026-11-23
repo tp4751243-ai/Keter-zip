@@ -12,6 +12,10 @@
 @font-face { font-family: 'David Libre'; src: url('/fonts/DavidLibre-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Noto Serif Hebrew'; src: url('/fonts/NotoSerifHebrew-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Noto Serif Hebrew'; src: url('/fonts/NotoSerifHebrew-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Heebo'; src: url('/fonts/Heebo-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Heebo'; src: url('/fonts/Heebo-Medium.ttf') format('truetype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Heebo'; src: url('/fonts/Heebo-SemiBold.ttf') format('truetype'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Heebo'; src: url('/fonts/Heebo-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
 
 @layer base {
   /* Default Day Theme — Clean, Bright Classic Editorial Studio */

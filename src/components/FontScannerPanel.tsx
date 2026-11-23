@@ -336,13 +336,13 @@ export const FontScannerPanel: React.FC<FontScannerPanelProps> = ({
         {/* Search + source filter */}
         <div className="px-5 py-2.5 bg-[var(--ui-surface-subtle)]/50 border-b border-[var(--ui-border)] flex items-center gap-2 text-xs">
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--ui-text-muted)] pointer-events-none" />
+            <Search className="w-3.5 h-3.5 absolute inset-s-2.5 top-1/2 -translate-y-1/2 text-[var(--ui-text-muted)] pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder={t('חיפוש גופן לפי שם...')}
-              className="w-full bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded px-3 py-1.5 pr-8 text-[var(--ui-text-primary)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:border-amber-500"
+              className="w-full bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded px-3 py-1.5 ps-8 text-[var(--ui-text-primary)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:border-amber-500"
             />
           </div>
           {(['all', 'built-in', 'system', 'custom'] as SourceFilter[]).map(f => (
@@ -431,7 +431,7 @@ export const FontScannerPanel: React.FC<FontScannerPanelProps> = ({
 
                   <div className="flex items-start gap-2 shrink-0">
                     {/* Score */}
-                    <div className="text-left">
+                    <div className="text-end">
                       <span
                         className={`text-sm font-bold font-mono ${
                           font.suitabilityScore >= 90
@@ -477,7 +477,7 @@ export const FontScannerPanel: React.FC<FontScannerPanelProps> = ({
 
                 {/* Live Preview Text Sample with Nikud */}
                 <div
-                  className="mt-2 p-2 bg-[#FCFAF5] text-stone-900 rounded border border-stone-300 text-sm overflow-hidden text-right leading-relaxed select-text shadow-xs"
+                  className="mt-2 p-2 bg-[#FCFAF5] text-stone-900 rounded border border-stone-300 text-sm overflow-hidden text-start leading-relaxed select-text shadow-xs"
                   style={{ fontFamily: `"${font.family}", serif` }}
                 >
                   {font.family.includes('Rashi')

@@ -20,7 +20,7 @@ export const DocumentHierarchyInspector: React.FC<DocumentHierarchyInspectorProp
 }) => {
   const { t } = useLanguage();
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-stone-900 border-l border-stone-800 shadow-2xl z-40 flex flex-col text-stone-200 select-none">
+    <div className="fixed inset-y-0 inset-s-0 w-96 bg-stone-900 border-e border-stone-800 shadow-2xl z-40 flex flex-col text-stone-200 select-none">
       {/* Header */}
       <div className="h-12 bg-stone-950 border-b border-stone-800 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
@@ -86,14 +86,14 @@ export const DocumentHierarchyInspector: React.FC<DocumentHierarchyInspectorProp
                   : isSource
                   ? 'bg-stone-950/70 border-stone-800 text-stone-200'
                   : isRashi
-                  ? 'bg-amber-900/10 border-amber-900/30 text-stone-300 mr-2'
+                  ? 'bg-amber-900/10 border-amber-900/30 text-stone-300 ms-2'
                   : isTosafot
-                  ? 'bg-blue-900/10 border-blue-900/30 text-stone-300 mr-2'
+                  ? 'bg-blue-900/10 border-blue-900/30 text-stone-300 ms-2'
                   : isFootnote
-                  ? 'bg-purple-950/20 border-purple-900/30 text-purple-300 mr-4'
+                  ? 'bg-purple-950/20 border-purple-900/30 text-purple-300 ms-4'
                   : isTable
-                  ? 'bg-emerald-950/20 border-emerald-900/30 text-emerald-300 mr-2'
-                  : 'bg-stone-950/50 border-stone-800 mr-2'
+                  ? 'bg-emerald-950/20 border-emerald-900/30 text-emerald-300 ms-2'
+                  : 'bg-stone-950/50 border-stone-800 ms-2'
               }`}
             >
               <div className="flex items-center justify-between mb-1">

@@ -483,7 +483,7 @@ export const DesignTypesettingPanel: React.FC<DesignTypesettingPanelProps> = ({
     <aside
       dir={dir}
       aria-label={t("חלונית עיצוב העמוד")}
-      className="h-full min-h-0 w-full bg-[var(--ui-surface)] border-r border-[var(--ui-border)] flex flex-col select-none shrink-0 z-20 overflow-hidden transition-colors duration-150"
+      className="h-full min-h-0 w-full bg-[var(--ui-surface)] border-s border-[var(--ui-border)] flex flex-col select-none shrink-0 z-20 overflow-hidden transition-colors duration-150"
     >
       {/* 1. Drawer Header */}
       <div className="h-11 px-4 border-b border-[var(--ui-border)] flex items-center justify-between bg-[var(--ui-surface)] shrink-0">

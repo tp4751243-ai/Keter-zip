@@ -285,7 +285,7 @@ export const TypesettingRulesModal: React.FC<TypesettingRulesModalProps> = ({
         {/* Main Body: Category Sidebar + Rules List */}
         <div className="flex-1 flex overflow-hidden">
           {/* Categories Sidebar */}
-          <div className="w-64 bg-[var(--ui-surface-subtle)] border-l border-[var(--ui-border)] p-3 space-y-1 overflow-y-auto">
+          <div className="w-64 bg-[var(--ui-surface-subtle)] border-e border-[var(--ui-border)] p-3 space-y-1 overflow-y-auto">
             {(Object.keys(CATEGORY_LABELS) as TypesettingRuleCategory[]).map(cat => (
               <button
                 key={cat}

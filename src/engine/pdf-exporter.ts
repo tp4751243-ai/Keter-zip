@@ -62,6 +62,7 @@ import type {
 } from '../types/design-settings';
 import { resolveRunningHeader } from '../types/design-settings';
 import { hebrewNumeral } from './hebrew-numerals';
+import { inRtlPlacementOrder } from './bidi-runs';
 
 /**
  * Print-ready PDF options (v0.3.0, module B). All fields optional; defaults
@@ -1250,7 +1251,8 @@ export class PdfExporter {
       const effectiveCentered = effectiveAlignment === 'center';
       const effectiveLeft = effectiveAlignment === 'left';
 
-      const realWords = line.words.filter(w => !w.isSpace && w.text.trim().length > 0);
+      // T11 — embedded Latin runs placed left to right (UAX #9, word level).
+      const realWords = inRtlPlacementOrder(line.words.filter(w => !w.isSpace && w.text.trim().length > 0));
       const firstIndentPt = line.firstLineIndentPt ?? line.firstLineIndent ?? 0;
       const hangingIndentPt = line.hangingIndentPt ?? 0;
       const rightIndentPt = line.rightIndentPt ?? 0;

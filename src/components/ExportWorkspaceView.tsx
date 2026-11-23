@@ -422,7 +422,7 @@ export const ExportWorkspaceView: React.FC<ExportWorkspaceViewProps> = ({
                   value={exportFileName}
                   onChange={e => setExportFileName(e.target.value)}
                   placeholder="vilna_berakhot_page2a"
-                  className="w-full bg-[var(--ui-surface-subtle)] border border-[var(--ui-border)] rounded-lg pl-3.5 pr-16 py-2 text-xs font-mono text-[var(--ui-text-primary)] focus:outline-none focus:border-[var(--ui-accent)]"
+                  className="w-full bg-[var(--ui-surface-subtle)] border border-[var(--ui-border)] rounded-lg pe-3.5 ps-16 py-2 text-xs font-mono text-[var(--ui-text-primary)] focus:outline-none focus:border-[var(--ui-accent)]"
                 />
                 <span dir="ltr" className="absolute right-3 top-2 text-xs font-bold text-[var(--ui-accent)] select-none">
                   .{selectedFormat}

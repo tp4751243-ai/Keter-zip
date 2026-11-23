@@ -21,7 +21,7 @@ export const DynamicKneeInspector: React.FC<DynamicKneeInspectorProps> = ({
   const { t, dir } = useLanguage();
   const containerClass = isDocked
     ? 'flex flex-col h-full bg-[#0F1623] text-slate-200 select-none overflow-hidden'
-    : 'fixed inset-y-0 left-0 w-88 bg-[#0F1623] border-r border-slate-800 shadow-2xl z-40 flex flex-col text-slate-200 select-none';
+    : 'fixed inset-y-0 inset-e-0 w-88 bg-[#0F1623] border-s border-slate-800 shadow-2xl z-40 flex flex-col text-slate-200 select-none';
 
   return (
     <div dir={dir} className={containerClass}>

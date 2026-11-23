@@ -175,14 +175,14 @@ export const FontDropdown: React.FC<FontDropdownProps> = ({
           <div className="absolute z-50 mt-1 w-full bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-lg overflow-hidden">
             <div className="p-2 border-b border-[var(--ui-border)] space-y-2">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--ui-text-muted)] pointer-events-none" />
+                <Search className="w-3.5 h-3.5 absolute inset-s-2.5 top-1/2 -translate-y-1/2 text-[var(--ui-text-muted)] pointer-events-none" />
                 <input
                   type="text"
                   autoFocus
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder={t('חיפוש גופן לפי שם...')}
-                  className="w-full bg-[var(--ui-surface-subtle)] border border-[var(--ui-border)] rounded-md px-2.5 py-1.5 pr-8 text-xs text-[var(--ui-text-primary)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:border-[var(--ui-accent)]"
+                  className="w-full bg-[var(--ui-surface-subtle)] border border-[var(--ui-border)] rounded-md px-2.5 py-1.5 ps-8 text-xs text-[var(--ui-text-primary)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:border-[var(--ui-accent)]"
                 />
               </div>
               <button

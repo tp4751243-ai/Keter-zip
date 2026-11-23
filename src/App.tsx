@@ -4406,7 +4406,7 @@ export default function App() {
           mount even if showQaFixList was somehow set while the mode was
           on (the toolbar button above is gated the same way). */}
       {developerMode && showQaFixList && (
-        <div className="fixed bottom-11 left-5 w-[28rem] max-w-[calc(100vw-2.5rem)] max-h-[70vh] overflow-auto bg-[var(--ui-surface)] border border-[var(--ui-border)] shadow-[var(--ui-floating-shadow)] rounded-xl z-50">
+        <div className="fixed bottom-11 inset-e-5 w-[28rem] max-w-[calc(100vw-2.5rem)] max-h-[70vh] overflow-auto bg-[var(--ui-surface)] border border-[var(--ui-border)] shadow-[var(--ui-floating-shadow)] rounded-xl z-50">
           <QaFixList
             issues={qaReport.issues}
             onApplyFix={handleApplyQaFix}
@@ -4432,7 +4432,7 @@ export default function App() {
       {/* 7. Toast Notification */}
       {notification && (
         <div
-          className={`fixed bottom-11 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-[var(--ui-floating-shadow)] text-xs font-medium border transition-all ${
+          className={`fixed bottom-11 inset-s-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-[var(--ui-floating-shadow)] text-xs font-medium border transition-all ${
             notification.type === 'success'
               ? 'bg-[var(--ui-surface)] text-[var(--ui-text-primary)] border-[var(--ui-border)]'
               : notification.type === 'warning'

@@ -247,7 +247,7 @@ export const EditorialStudioHeader: React.FC<EditorialStudioHeaderProps> = ({
       {/* RIGHT SECTION: Brand + 3 Primary Work Modes Switcher (כניסה | עריכה | ייצוא) + Document Title */}
       <div className="flex items-center gap-3">
         {/* Keter Brand Identity */}
-        <div className="flex items-center gap-2 pl-2 border-l border-[var(--ui-border)]">
+        <div className="flex items-center gap-2 pe-2 border-e border-[var(--ui-border)]">
           <div className="w-7 h-7 rounded-md bg-[var(--ui-accent)] flex items-center justify-center shadow-2xs">
             <Crown className="w-3.5 h-3.5 text-white" />
           </div>
@@ -320,7 +320,7 @@ export const EditorialStudioHeader: React.FC<EditorialStudioHeaderProps> = ({
           </button>
 
           {openMenu === 'project' && (
-            <div className="absolute right-0 mt-1.5 w-64 bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-[var(--ui-floating-shadow)] py-1.5 z-50 text-xs">
+            <div className="absolute inset-s-0 mt-1.5 w-64 bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-[var(--ui-floating-shadow)] py-1.5 z-50 text-xs">
               <div className="px-3 py-1.5 border-b border-[var(--ui-border)] mb-1">
                 <span className="text-[10px] font-medium text-[var(--ui-text-muted)] block">
                   
@@ -543,7 +543,7 @@ export const EditorialStudioHeader: React.FC<EditorialStudioHeaderProps> = ({
             </button>
 
             {openMenu === 'layout' && (
-              <div className="absolute right-0 mt-1.5 w-72 bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-[var(--ui-floating-shadow)] py-1.5 z-50 text-xs">
+              <div className="absolute inset-s-0 mt-1.5 w-72 bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-[var(--ui-floating-shadow)] py-1.5 z-50 text-xs">
                 <div className="px-3 py-1 text-[10px] font-medium text-[var(--ui-text-muted)] border-b border-[var(--ui-border)] mb-1">
                   
                   {t("בחר מתכונת עימוד לספר")}
@@ -755,7 +755,7 @@ export const EditorialStudioHeader: React.FC<EditorialStudioHeaderProps> = ({
           </button>
 
           {openMenu === 'more' && (
-            <div className="absolute left-0 mt-1.5 w-64 bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-[var(--ui-floating-shadow)] py-1.5 z-50 text-xs">
+            <div className="absolute inset-e-0 mt-1.5 w-64 bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-lg shadow-[var(--ui-floating-shadow)] py-1.5 z-50 text-xs">
               <button
                 onClick={() => {
                   setOpenMenu(null);

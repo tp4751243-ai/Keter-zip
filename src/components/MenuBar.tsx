@@ -133,14 +133,14 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           {t("קובץ")}
         </button>
         {activeMenu === 'file' && (
-          <div className="absolute top-full right-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
+          <div className="absolute top-full inset-s-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
             {onNewProject && (
               <button
                 onClick={() => {
                   onNewProject();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs text-slate-100 font-medium"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs text-slate-100 font-medium"
               >
                 <div className="flex items-center gap-2.5">
                   <FilePlus2 className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -157,7 +157,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onOpenContentEditor();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs text-[#E6C665]"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs text-[#E6C665]"
               >
                 <div className="flex items-center gap-2.5">
                   <FileText className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -173,7 +173,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 onOpenDocx();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
             >
               <div className="flex items-center gap-2.5">
                 <FileText className="w-3.5 h-3.5 text-sky-400" />
@@ -192,7 +192,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onSaveProjectFile();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <Save className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -209,7 +209,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onLoadProjectFile();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <FolderOpen className="w-3.5 h-3.5 text-slate-400" />
@@ -225,7 +225,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 onExportPdf();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
             >
               <div className="flex items-center gap-2.5">
                 <Download className="w-3.5 h-3.5 text-emerald-400" />
@@ -240,7 +240,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 onExportIdml();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
             >
               <div className="flex items-center gap-2.5">
                 <FileCode2 className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -268,14 +268,14 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           {t("עריכה")}
         </button>
         {activeMenu === 'edit' && (
-          <div className="absolute top-full right-0 w-72 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
+          <div className="absolute top-full inset-s-0 w-72 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
             <button
               onClick={() => {
                 if (canUndo && onUndo) onUndo();
                 closeMenu();
               }}
               disabled={!canUndo}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-between text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-between text-xs"
             >
               <div className="flex items-center gap-2.5 truncate">
                 <Undo2 className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
@@ -293,7 +293,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 closeMenu();
               }}
               disabled={!canRedo}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-between text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-between text-xs"
             >
               <div className="flex items-center gap-2.5 truncate">
                 <Redo2 className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
@@ -313,7 +313,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                     onOpenContentEditor();
                     closeMenu();
                   }}
-                  className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                  className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
                 >
                   <div className="flex items-center gap-2.5">
                     <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -340,14 +340,14 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           {t("תצוגה")}
         </button>
         {activeMenu === 'view' && (
-          <div className="absolute top-full right-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
+          <div className="absolute top-full inset-s-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
             {onToggleNavigator && (
               <button
                 onClick={() => {
                   onToggleNavigator();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <PanelRight className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -364,7 +364,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onToggleDesignPanel();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <PanelLeft className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -382,7 +382,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onToggleBaselines();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <Eye className="w-3.5 h-3.5 text-slate-400" />
@@ -399,7 +399,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onToggleKneeGuide();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <Layers className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -418,7 +418,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                     onZoomChange(1.0);
                     closeMenu();
                   }}
-                  className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                  className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
                 >
                   <div className="flex items-center gap-2.5">
                     <ZoomIn className="w-3.5 h-3.5 text-slate-400" />
@@ -431,7 +431,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                     onZoomChange(1.25);
                     closeMenu();
                   }}
-                  className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
+                  className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center justify-between text-xs"
                 >
                   <div className="flex items-center gap-2.5">
                     <ZoomIn className="w-3.5 h-3.5 text-slate-400" />
@@ -459,13 +459,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           {t("עימוד ורב-טקסט")}
         </button>
         {activeMenu === 'layout' && (
-          <div className="absolute top-full right-0 w-72 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
+          <div className="absolute top-full inset-s-0 w-72 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
             <button
               onClick={() => {
                 onOpenKneeInspector();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
             >
               <Layers className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>{t("כוונון ברכיים דינמיות ומדרגות עמוד")}</span>
@@ -476,7 +476,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   onOpenRulesEngine();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs text-[#E6C665]"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs text-[#E6C665]"
               >
                 <Sliders className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span>{t("חוקי עימוד ואילוצי מערכת...")}</span>
@@ -487,7 +487,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 onOpenHierarchy();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
             >
               <Network className="w-3.5 h-3.5 text-sky-400" />
               <span>{t("מבנה הספר וקישורי דיבור המתחיל")}</span>
@@ -497,7 +497,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 onRunQa();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>{t("בדיקת תקינות ספר (Preflight QA)")}</span>
@@ -520,13 +520,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           {t("טיפוגרפיה וגופנים")}
         </button>
         {activeMenu === 'typography' && (
-          <div className="absolute top-full right-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
+          <div className="absolute top-full inset-s-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
             <button
               onClick={() => {
                 onOpenFontInspector();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
             >
               <Search className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>{t("ספריית גופנים ובדיקת תאימות ניקוד וטעמים...")}</span>
@@ -537,7 +537,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                   if (!isDesignPanelOpen) onToggleDesignPanel();
                   closeMenu();
                 }}
-                className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+                className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
               >
                 <Sliders className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span>{t("מפקח סגנונות תו, פסקה וירושה")}</span>
@@ -561,13 +561,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           {t("כלים ורישוי")}
         </button>
         {activeMenu === 'diagnostics' && (
-          <div className="absolute top-full right-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
+          <div className="absolute top-full inset-s-0 w-68 bg-[#131B2B] border border-slate-700/90 shadow-2xl rounded-lg py-1.5 mt-1 text-slate-200 z-50">
             <button
               onClick={() => {
                 onOpenTests();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
             >
               <Cpu className="w-3.5 h-3.5 text-emerald-400" />
               <span>{t("בדיקות מערכת ואימות מנוע (QA Suite)...")}</span>
@@ -577,7 +577,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                 onOpenReport();
                 closeMenu();
               }}
-              className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
+              className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs"
             >
               <BookMarked className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>{t("מפרט ארכיטקטורה ודוח מערכת...")}</span>
@@ -590,7 +590,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                     onOpenLicense();
                     closeMenu();
                   }}
-                  className="w-full text-right px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs text-[#E6C665]"
+                  className="w-full text-start px-3.5 py-2 hover:bg-slate-800/80 flex items-center gap-2.5 text-xs text-[#E6C665]"
                 >
                   <KeyRound className="w-3.5 h-3.5 text-[#D4AF37]" />
                   <span>{t("רישוי מסחרי והפעלת מחשב...")}</span>

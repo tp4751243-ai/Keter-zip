@@ -1097,8 +1097,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   // English) and its inner border faces the canvas. Before this fix the
   // floating drawer was hard-coded to the left in both languages.
   const containerClass = isDocked
-    ? `flex flex-col h-full min-h-0 bg-[var(--ui-surface)] text-[var(--ui-text-primary)] select-none overflow-hidden ${dir === 'rtl' ? 'border-l' : 'border-r'} border-[var(--ui-border)] transition-colors duration-150`
-    : `fixed inset-y-0 ${dir === 'rtl' ? 'right-0' : 'left-0'} w-88 bg-[var(--ui-surface)] ${dir === 'rtl' ? 'border-l' : 'border-r'} border-[var(--ui-border)] shadow-[var(--ui-floating-shadow)] z-40 flex flex-col text-[var(--ui-text-primary)]`;
+    ? `flex flex-col h-full min-h-0 bg-[var(--ui-surface)] text-[var(--ui-text-primary)] select-none overflow-hidden ${dir === 'rtl' ? 'border-e' : 'border-s'} border-[var(--ui-border)] transition-colors duration-150`
+    : `fixed inset-y-0 ${dir === 'rtl' ? 'inset-s-0' : 'inset-e-0'} w-88 bg-[var(--ui-surface)] ${dir === 'rtl' ? 'border-e' : 'border-s'} border-[var(--ui-border)] shadow-[var(--ui-floating-shadow)] z-40 flex flex-col text-[var(--ui-text-primary)]`;
 
   return (
     <aside dir={dir} className={containerClass}>
