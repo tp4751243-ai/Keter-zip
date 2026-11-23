@@ -79,6 +79,14 @@ import {
 import { CustomLayoutBox, SemanticStyleRole } from '../types/design-settings';
 import { detectYiddish } from './yiddish-sefarim';
 import { extractOpeningWord, openingFrameGeometry } from './vilna-opening-frame';
+import {
+  marginalColumnGeometry,
+  planMarginalItems,
+  stackMarginalColumn,
+  type MarginalColumnGeometry,
+  type MarginSide,
+  type QueuedMarginal,
+} from './vilna-marginalia';
 import { derivePerakim, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
@@ -3874,6 +3882,79 @@ export class PaginationEngine {
       rulesConfig
     );
 
+    // Layout training T2.4 — the marginal apparatus (Ein Mishpat, Masoret
+    // HaShas, Torah Or, Gilyon …) runs in narrow side columns. The knee is
+    // solved in the width left between them (a symmetric carve, so the
+    // knee's own inner/outer mirroring is untouched) and its lines are
+    // shifted back by `marginDx`; pages keep the full geometry.
+    const marginalOn = designSettings?.ravText?.marginalColumns?.enabled !== false;
+    const marginalItems = marginalOn ? planMarginalItems(units) : [];
+    const marginalUnitIds = new Set(marginalItems.map(i => i.unitId));
+    const pageGeometry = geometry;
+    const fullContentWidth = contentWidth;
+    let marginGeom: MarginalColumnGeometry | null = null;
+    let marginDx = 0;
+    if (marginalItems.length > 0) {
+      marginGeom = marginalColumnGeometry(contentWidth, sourceFontSize);
+      marginDx = marginGeom.widthPt + marginGeom.gapPt;
+      geometry = {
+        ...geometry,
+        marginInside: geometry.marginInside + marginDx,
+        marginOutside: geometry.marginOutside + marginDx,
+      };
+      contentWidth -= 2 * marginDx;
+    }
+    const sourceOrderIdx = new Map<string, number>();
+    {
+      let si = 0;
+      for (const u of units) if (u.role === 'main_source') sourceOrderIdx.set(u.id, si++);
+    }
+    const marginQueues: Record<MarginSide, QueuedMarginal[]> = { inner: [], outer: [] };
+    let makeMarginTitle: (text: string) => TypesetLine | null = () => null;
+    if (marginGeom) {
+      const mg = marginGeom;
+      const margEngine = new TypesetterEngine(mg.fontSizePt, rulesConfig, designSettings);
+      const unitById = new Map(units.map(u => [u.id, u]));
+      const sized = (l: TypesetLine): TypesetLine => ({ ...l, fontSizePt: mg.fontSizePt });
+      for (const it of marginalItems) {
+        const u = unitById.get(it.unitId);
+        if (!u) continue;
+        const lines = margEngine
+          .typesetContentUnit(u, mg.widthPt, mg.lineHeightPt, true)
+          .map(sized);
+        marginQueues[it.side].push({ item: it, lines, placed: 0 });
+      }
+      makeMarginTitle = (text: string) => {
+        const ls = margEngine.typesetContentUnit(
+          { id: 'margin-title', role: 'tertiary_comment', rawText: text, styleName: 'margin-title', order: 0, hierarchyLevel: 0 } as ContentUnit,
+          mg.widthPt,
+          mg.lineHeightPt,
+          false
+        );
+        const l = ls[0];
+        if (!l) return null;
+        return {
+          ...sized(l),
+          alignment: 'center',
+          paragraphAlignment: 'center',
+          fontWeight: 700,
+          isJustified: false,
+          isLastLine: true,
+          words: l.words.map(w => ({ ...w, isBold: true })),
+        };
+      };
+    }
+    const marginPending = (): boolean =>
+      marginQueues.inner.some(q => q.placed < q.lines.length) ||
+      marginQueues.outer.some(q => q.placed < q.lines.length);
+    const shiftX = <T extends { xLeft?: number; xRight?: number }>(xs: T[]): void => {
+      if (marginDx === 0) return;
+      for (const x of xs) {
+        if (x.xLeft !== undefined) x.xLeft += marginDx;
+        if (x.xRight !== undefined) x.xRight += marginDx;
+      }
+    };
+
     // Build cumulative group and intermediate candidate boundary offsets in the ordered ShapedWord streams
     // so the solver can test placing complete linked groups and valid intermediate continuation breakpoints.
     const groupBoundaries: {
@@ -4032,9 +4113,9 @@ export class PaginationEngine {
         terStyle?.paragraph.leadingPt ?? terFontSize * 1.25
       );
       const terEngine = new TypesetterEngine(terFontSize, rulesConfig, designSettings);
-      const terLinesAll: TypesetLine[] = tertiaryUnits.flatMap(u =>
-        terEngine.typesetContentUnit(u, contentWidth, terLineH, true)
-      );
+      const terLinesAll: TypesetLine[] = tertiaryUnits
+        .filter(u => !marginalUnitIds.has(u.id))
+        .flatMap(u => terEngine.typesetContentUnit(u, contentWidth, terLineH, true));
       let terLineCursor = 0;
 
       // v0.8.0 Part C (§7): the Michtav box (Vilna Shas title letter) lives
@@ -4065,6 +4146,7 @@ export class PaginationEngine {
           tCursor < tosafotShapedAll.length ||
           terLineCursor < terLinesAll.length ||
           pendingRavFnQueue.length > 0 ||
+          marginPending() ||
           p === 0) &&
         p < 500
       ) {
@@ -5038,12 +5120,36 @@ export class PaginationEngine {
       rCursor = Math.min(rashiShapedAll.length, rCursor + actualRConsumed);
       tCursor = Math.min(tosafotShapedAll.length, tCursor + actualTConsumed);
 
+      // Layout training T2.4 — fill the two apparatus columns with the
+      // notes whose Gemara is on this page (or earlier, if they did not
+      // fit there). Amud a (even p) is a left-hand page: inner = right.
+      const marginLines: TypesetLine[] = [];
+      if (marginGeom) {
+        const dueSourceIdx =
+          sCursor >= sourceShapedAll.length
+            ? Number.POSITIVE_INFINITY
+            : sCursor > 0
+              ? (sourceOrderIdx.get(sourceShapedAll[sCursor - 1]?.unitId ?? '') ?? -1)
+              : -1;
+        const innerOnRight = p % 2 === 0;
+        const w = marginGeom.widthPt;
+        const right: [number, number] = [fullContentWidth - w, fullContentWidth];
+        const left: [number, number] = [0, w];
+        for (const side of ['outer', 'inner'] as const) {
+          const [cl, cr] = (side === 'inner') === innerOnRight ? right : left;
+          marginLines.push(
+            ...stackMarginalColumn(marginQueues[side], dueSourceIdx, cl, cr, contentHeight, marginGeom, makeMarginTitle)
+          );
+        }
+      }
+
       const hasMoreAfterPage =
         sCursor < sourceShapedAll.length ||
         rCursor < rashiShapedAll.length ||
         tCursor < tosafotShapedAll.length ||
         terLineCursor < terLinesAll.length ||
-        pendingRavFnQueue.length > 0;
+        pendingRavFnQueue.length > 0 ||
+        marginPending();
 
       if (linkDecisionMsg) {
         res.layoutScore.editorialDecisions.push(linkDecisionMsg);
@@ -5187,13 +5293,23 @@ export class PaginationEngine {
         userOrnamentRules
       );
 
+      // Layout training T2.4 — back from the carved knee width to the
+      // full page: shift every knee-solved element by the column offset.
+      shiftX(res.sourceLines);
+      shiftX(res.rashiLines);
+      shiftX(res.tosafotLines);
+      shiftX(fnLines);
+      shiftX(terLines);
+      shiftX(res.occupiedRegions);
+
       pages.push({
         pageIndex: p,
         pageNumber,
         pageNumberHebrew: PdfExporter.toHebrewGematria(pageNumber),
         headerTitle: title,
         layoutType,
-        geometry,
+        geometry: pageGeometry,
+        marginLines: marginLines.length > 0 ? marginLines : undefined,
         sourceLines: res.sourceLines,
         rashiLines: res.rashiLines,
         tosafotLines: res.tosafotLines,

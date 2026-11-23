@@ -329,15 +329,30 @@ function scorePage(
     detail: `Rashi median x on ${side(rx)}, Tosafot on ${side(tx)}`,
   });
 
-  // M1 — marginal apparatus columns in the side margins.
-  const ps = plan.peripheralStreams ?? [];
-  const sideCols = ps.filter(p => p.lines.length > 0 && p.lines.every(l => l.xRight <= g.marginInside + 2 || l.xLeft >= g.pageWidth - g.marginOutside - 2 || l.xRight - l.xLeft < g.pageWidth * 0.16));
-  out.push({
-    id: 'M1',
-    label: 'Marginal apparatus (Ein Mishpat / Torah Or / Gilyon) as side columns',
-    status: sideCols.length > 0 ? 'pass' : 'fail',
-    detail: ps.length ? `${ps.length} peripheral blocks (${ps.map(p => p.stream).join(', ')}), ${sideCols.length} as side columns` : 'no apparatus drawn',
-  });
+  // M1 — marginal apparatus in side columns, on the correct side:
+  // Ein Mishpat (em-*) outer; Torah Or (to-*) and Gilyon (gl-*) inner.
+  const tb0 = g.marginInside;
+  const tb1 = g.pageWidth - g.marginOutside;
+  const tbW = tb1 - tb0;
+  const margLines = plan.lines.filter(l => /^(em|to|gl)-/.test(l.unitId));
+  if (margLines.length === 0) {
+    out.push({ id: 'M1', label: 'Marginal apparatus in side columns, correct side', status: 'info', detail: 'no apparatus on this page' });
+  } else {
+    const bad: string[] = [];
+    for (const l of margLines) {
+      const inLeft = l.xRight <= tb0 + tbW * 0.14;
+      const inRight = l.xLeft >= tb1 - tbW * 0.14;
+      const sideOf = inLeft ? 'left' : inRight ? 'right' : 'middle';
+      const want = l.unitId.startsWith('em-') ? outerSide : innerIsRight ? 'right' : 'left';
+      if (sideOf !== want) bad.push(`${l.unitId} on ${sideOf} (want ${want})`);
+    }
+    out.push({
+      id: 'M1',
+      label: 'Marginal apparatus in side columns, correct side',
+      status: bad.length === 0 ? 'pass' : 'fail',
+      detail: bad.length ? bad.slice(0, 3).join('; ') : `${margLines.length} apparatus lines in side columns`,
+    });
+  }
 
   // T1 — `גמ׳` transition marker placed at the Gemara boundary word.
   const markers = page.transitionMarkers ?? [];
@@ -397,18 +412,23 @@ function scorePage(
   // P2 — nothing overlaps, nothing escapes the page.
   const ls = plan.lines;
   let overlaps = 0;
+  const overlapEx: string[] = [];
   for (let i2 = 0; i2 < ls.length; i2++)
     for (let j = i2 + 1; j < ls.length; j++) {
       const a2 = ls[i2];
       const b2 = ls[j];
-      if (a2.yBottom - 1 > b2.yTop && b2.yBottom - 1 > a2.yTop && a2.xRight - 1 > b2.xLeft && b2.xRight - 1 > a2.xLeft) overlaps++;
+      if (a2.yBottom - 1 > b2.yTop && b2.yBottom - 1 > a2.yTop && a2.xRight - 1 > b2.xLeft && b2.xRight - 1 > a2.xLeft) {
+        overlaps++;
+        if (overlapEx.length < 2)
+          overlapEx.push(`${a2.role}[${a2.xLeft.toFixed(0)}-${a2.xRight.toFixed(0)} y${a2.yTop.toFixed(0)}-${a2.yBottom.toFixed(0)}] × ${b2.role}[${b2.xLeft.toFixed(0)}-${b2.xRight.toFixed(0)} y${b2.yTop.toFixed(0)}-${b2.yBottom.toFixed(0)}]`);
+      }
     }
   const escaped = ls.filter(l => l.yBottom > g.pageHeight - 2 || l.yTop < 2 || l.xLeft < 2 || l.xRight > g.pageWidth - 2).length;
   out.push({
     id: 'P2',
     label: 'No overlapping lines, nothing off the page',
     status: overlaps === 0 && escaped === 0 ? 'pass' : 'fail',
-    detail: `${overlaps} overlapping line pairs, ${escaped} lines off the page`,
+    detail: `${overlaps} overlapping line pairs, ${escaped} lines off the page${overlapEx.length ? ` (e.g. ${overlapEx.join('; ')})` : ''}`,
   });
 
   // A1 — amud alignment (info): which Vilna amudim this page's Gemara came from.
@@ -506,7 +526,22 @@ async function main() {
       detail: `${pages.length} pages for ${vilnaPages} Vilna amudim (${(pages.length / vilnaPages).toFixed(2)}×)`,
       value: pages.length / vilnaPages,
     };
-    report.unshift({ page: 0, folio: 'book', checks: [d1] });
+    // M2 — every apparatus note placed, and no page made of apparatus only.
+    const allMarg = new Set(built.units.filter(u => /^(em|to|gl)-/.test(u.id)).map(u => u.id));
+    const placedMarg = new Set<string>();
+    let apparatusOnly = 0;
+    for (const pg of pages) {
+      const pl = PdfExporter.buildPageRenderPlan(pg);
+      for (const l of pl.lines) if (allMarg.has(l.unitId)) placedMarg.add(l.unitId);
+      if (pl.lines.length > 0 && !pl.lines.some(l => isSource(l.role) || isRashi(l.role) || isTosafot(l.role))) apparatusOnly++;
+    }
+    const m2: Check = {
+      id: 'M2',
+      label: 'All apparatus notes placed; no apparatus-only pages',
+      status: placedMarg.size === allMarg.size && apparatusOnly === 0 ? 'pass' : 'fail',
+      detail: `${placedMarg.size}/${allMarg.size} notes placed, ${apparatusOnly} apparatus-only pages`,
+    };
+    report.unshift({ page: 0, folio: 'book', checks: [d1, m2] });
     const scored = report.flatMap(r => r.checks).filter(c2 => c2.status !== 'info');
     const score = scored.length ? Math.round((100 * scored.filter(c2 => c2.status === 'pass').length) / scored.length) : 0;
     summary.push({ profile, score, pages: pages.length });

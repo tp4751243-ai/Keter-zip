@@ -2185,7 +2185,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
           const sepCfg = isCommentBoundary
             ? typesetResult.designSettings?.ravText?.commentarySeparator
             : typesetResult.designSettings?.ravText?.paragraphSeparator;
-          const styleId: SeparatorStyleId = sepCfg?.styleId ?? 'none';
+          const styleId: SeparatorStyleId = line.separatorStyleIdOverride ?? sepCfg?.styleId ?? 'none';
           if (styleId === 'none') return null;
           const ratio = Math.max(0.15, Math.min(1, sepCfg?.widthRatio ?? 0.45));
           const strokePt = Math.max(0.4, sepCfg?.thicknessPt ?? 0.65);
@@ -3130,6 +3130,11 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
               <div data-tier="tosafot" className="absolute inset-0 z-20 pointer-events-none">
                 {tosafotLines.map(line => renderLine(line, 'tosafot'))}
               </div>
+              {typesetResult.marginLines && typesetResult.marginLines.length > 0 && (
+                <div data-tier="margin" className="absolute inset-0 z-20 pointer-events-none">
+                  {typesetResult.marginLines.map(line => renderLine(line, 'margin'))}
+                </div>
+              )}
               {tertiaryLines && tertiaryLines.length > 0 && (
                 <div data-tier="tertiary" className="absolute inset-0 z-20 pointer-events-none">
                   {tertiaryLines.map(line => renderLine(line, 'tertiary'))}

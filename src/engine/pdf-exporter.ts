@@ -1416,7 +1416,9 @@ export class PdfExporter {
         transitionMarkerStyle: designSettings?.ravText?.transitionMarker?.style ?? 'text',
         transitionMarkerSizePt: designSettings?.ravText?.transitionMarker?.sizePt,
         transitionMarkerPosition: designSettings?.ravText?.transitionMarker?.position ?? 'before_first_word',
-        separatorStyleId: line.unitBoundaryAfter ? (sepCfg?.styleId ?? 'none') : undefined,
+        separatorStyleId: line.unitBoundaryAfter
+          ? (line.separatorStyleIdOverride ?? sepCfg?.styleId ?? 'none')
+          : undefined,
         separatorWidthRatio: line.unitBoundaryAfter ? (sepCfg?.widthRatio ?? 0.45) : undefined,
         separatorThicknessPt: line.unitBoundaryAfter ? (sepCfg?.thicknessPt ?? 0.65) : undefined,
         words: wordCommands,
@@ -1520,6 +1522,22 @@ export class PdfExporter {
           buildLineCommand(line, tRightX, mTop + line.yBaseline, tosafotFont, 10.5, 400, false)
         );
       }
+    }
+
+    // 4.4 Layout training T2.4 — Vilna marginal apparatus columns. The
+    // lines carry content coordinates of the full page.
+    for (const line of page.marginLines ?? []) {
+      planLines.push(
+        buildLineCommand(
+          line,
+          mLeft + (line.xRight ?? contentW),
+          mTop + line.yBaseline,
+          tertiaryFont,
+          line.fontSizePt ?? 8,
+          line.fontWeight ?? 400,
+          line.alignment === 'center'
+        )
+      );
     }
 
     // 4.5 Tertiary band (v0.8.0 Part C §1): Ein Mishpat / Ner Mitzvah /

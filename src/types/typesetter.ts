@@ -455,6 +455,8 @@ export interface TypesetLine {
   transitionMarkerConfidence?: number;
   transitionMarkerVerified?: boolean;
   isOpeningBoxAnchor?: boolean;
+  /** Layout training T2.4 — per-line separator (e.g. the flourish between Vilna margin sections). */
+  separatorStyleIdOverride?: SeparatorStyleId;
   openingBoxWordsCount?: number;
 }
 
@@ -824,6 +826,8 @@ export interface PageTypesetResult {
   openingWordBox?: OpeningWordBoxGeom;
   /** Layout training T2.1 — Vilna running head (replaces the generic header + folio when set). */
   vilnaHeader?: VilnaHeaderGeom;
+  /** Layout training T2.4 — Vilna marginal apparatus columns (content coordinates of the full page). */
+  marginLines?: TypesetLine[];
   /**
    * Layout training T2.2 — set on the page where the knee solver reserved
    * the opening frame's space at the top of the Gemara column; the frame

@@ -917,6 +917,12 @@ export const DEFAULT_TITLE_PAGE_SETTINGS: TitlePageSettings = {
 };
 
 export interface RavTextDesignSettings {
+  /**
+   * Layout training T2.4 — marginal apparatus (Ein Mishpat, Masoret
+   * HaShas, Torah Or, Gilyon …) as side columns. On unless explicitly
+   * disabled; off = the legacy full-width band below the knee.
+   */
+  marginalColumns?: { enabled: boolean };
   sourceFontFamily: string;
   rashiFontFamily: string;
   tosafotFontFamily: string;
