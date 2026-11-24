@@ -310,6 +310,9 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
       lineIdx = 0;
       continue;
     }
+    // Unique line index per page (the preview keys line elements by it).
+    placed.forEach((l, i) => (l.lineIndex = i));
+    fnPlaced.forEach((l, i) => (l.lineIndex = placed.length + i));
     const p = pages.length;
     pages.push({
       pageIndex: p,

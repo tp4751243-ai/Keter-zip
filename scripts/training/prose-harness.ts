@@ -134,7 +134,13 @@ async function main() {
   }
   check('P6', headBad.length === 0, headBad.slice(0, 4).join(', ') || 'centred across the text block');
 
-  const firstLines = pages.flatMap(p => lines(p).filter(l => (l.role === 'regular_paragraph' || l.role === 'main_source') && l.lineIndex === 0));
+  // first line of each paragraph = the first line (in reading order) carrying its unit id
+  const seenUnits = new Set<string>();
+  const firstLines = pages.flatMap(p => lines(p).filter(l => l.role === 'regular_paragraph' || l.role === 'main_source')).filter(l => {
+    if (seenUnits.has(l.unitId)) return false;
+    seenUnits.add(l.unitId);
+    return true;
+  });
   if (process.env.PH_DEBUG) for (const l of firstLines.slice(0, 2)) console.log(JSON.stringify(l.words.slice(0, 3).map(w => ({ t: w.text, b: w.isBold, fw: w.fontWeight, d: w.isDibbur }))), l.fontWeight);
   const boldFirst = firstLines.filter(l => { const w = l.words.find(w => !w.isSpace); return w && (w.isBold || (w.fontWeight ?? 400) >= 600); });
   check('P7', firstLines.length > 0 && boldFirst.length >= firstLines.length * 0.95, `${boldFirst.length}/${firstLines.length} paragraphs open with a bold word`);
@@ -190,6 +196,8 @@ async function main() {
   }
   const jg = justificationGaps(pages, new Set(['main_source', 'regular_paragraph']));
   check('P14', jg.p95 <= 0.9, `widest gap per line: median ${jg.median.toFixed(2)} em, p95 ${jg.p95.toFixed(2)} em, max ${jg.max.toFixed(2)} em over ${jg.lines} lines`);
+  const dup = pages.filter(p => { const seen = new Set<number>(); return [...p.sourceLines, ...p.footnoteLines].some(l => (seen.has(l.lineIndex) ? true : (seen.add(l.lineIndex), false))); }).map(p => p.bodyPageIndex);
+  check('P15', dup.length === 0, dup.length ? `duplicate line keys on pages ${dup.join(',')}` : 'unique line keys on every page');
   check('P11', spill.length === 0, spill.slice(0, 5).join(' ') || 'every word inside its column');
 
   const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);

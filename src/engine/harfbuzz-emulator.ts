@@ -120,6 +120,16 @@ export class HarfBuzzShaperEngine {
   private static measureCtx: CanvasRenderingContext2D | null = null;
   private static metricCache: Map<string, number> = new Map();
 
+  /**
+   * Forget every measured advance. Call when a web font finishes loading:
+   * glyphs measured before it arrived were measured in a fallback face
+   * (narrower Hebrew), which glued the words of justified lines together
+   * on screen once the real face was drawn.
+   */
+  public static clearMetricCache(): void {
+    HarfBuzzShaperEngine.metricCache.clear();
+  }
+
   constructor(
     fontSize: number = 14,
     fontFamily: string = 'Frank Ruhl Libre',

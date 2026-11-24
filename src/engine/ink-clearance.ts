@@ -157,3 +157,8 @@ export function requiredPitch(lines: TypesetLine[], minGapPt = 0.6): number {
   }
   return need;
 }
+
+/** Forget measured ink (call when a web font finishes loading). */
+export function clearInkCache(): void {
+  cache.clear();
+}

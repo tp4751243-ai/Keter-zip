@@ -233,6 +233,18 @@ check('C12', new Set(mixed).size <= 1, `pasuk faces: ${[...new Set(mixed)].join(
 
 const jg = justificationGaps(pages, undefined);
 check('C13', jg.p95 <= 0.75, `widest gap per line: median ${jg.median.toFixed(2)} em, p95 ${jg.p95.toFixed(2)} em, max ${jg.max.toFixed(2)} em over ${jg.lines} lines`);
+// C14: every line of a page has its own index — the screen preview keys
+// its line elements by it; duplicates left the previous page's lines on
+// screen, piled over the new page (user report).
+const dupPages = pages.filter(p => {
+  const seen = new Set<number>();
+  for (const l of [...p.sourceLines, ...(p.marginLines ?? [])]) { if (seen.has(l.lineIndex)) return true; seen.add(l.lineIndex); }
+  return false;
+}).map(p => p.bodyPageIndex);
+check('C14', dupPages.length === 0, dupPages.length ? `duplicate line keys on pages ${dupPages.slice(0, 5).join(',')}` : 'unique line keys on every page');
+const braces = pages.flatMap(p => allLines(p).flatMap(l => l.words.filter(w => /[{}]/.test(w.text)).map(w => w.text)));
+check('C15', braces.length === 0, braces.slice(0, 3).join(' ') || 'no {פ} / {ס} marks printed');
+
 const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);
 const outDir = path.resolve('training/out/chumash', book);
 fs.mkdirSync(outDir, { recursive: true });

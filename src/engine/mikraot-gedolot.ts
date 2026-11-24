@@ -150,9 +150,19 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   const positions = chumashPositions(units);
   const pasukNumber: number[] = [];
   const intro: ContentUnit[] = [];
+  // Parsha marks typed in the text: {פ} (petucha — the next pasuk starts a
+  // new line) and {ס} (setuma — a wide space). The marks are not printed.
+  const parshaAfter: Array<'פ' | 'ס' | undefined> = [];
+  const PARSHA_RE = /\s*\{([פס])\}\s*/g;
   const stripNumber = (u: ContentUnit): ContentUnit => {
     const lead = leadingPasukNumber(u.rawText);
-    return lead ? { ...u, rawText: lead.rest, textRuns: undefined } : u;
+    let text = lead ? lead.rest : u.rawText;
+    if (PARSHA_RE.test(text)) {
+      PARSHA_RE.lastIndex = 0;
+      text = text.replace(PARSHA_RE, ' ').trim();
+      return { ...u, rawText: text, textRuns: undefined };
+    }
+    return lead ? { ...u, rawText: text, textRuns: undefined } : u;
   };
   let chapterCounter = new Map<number, number>();
   const mainFile = units.find(x => x.role === 'main_source')?.importFileIndex;
@@ -174,6 +184,7 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       const n = pos && pos.explicit && pos.pasuk > 0 ? pos.pasuk : (chapterCounter.get(ch) ?? 0) + 1;
       chapterCounter.set(ch, n);
       pasukNumber.push(n);
+      parshaAfter.push(/\{פ\}/.test(u.rawText) ? 'פ' : /\{ס\}/.test(u.rawText) ? 'ס' : undefined);
       pesukim.push(stripNumber(u));
     } else if (isOnkelos(u)) onkelosUnits.push(stripNumber(u));
     else if (u.role === 'chapter' || u.role === 'heading' || u.role === 'main_title' || u.role === 'subtitle') {
@@ -340,8 +351,23 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   const carry = new Map<string, TypesetLine[]>(); // band key → lines carried to the next page
 
   const measure = (from: number, to: number, withCarry: boolean): Measured => {
-    const pWords = pesukim.slice(from, to).flatMap((u, j) => shape(u, pasukSize, pasukFont, pasukLabel(from + j)));
-    const pasukLines = setLines(pWords, pasukW, pasukSize, pasukFont, 'main_source', pesukim[from]?.id ?? 'pasuk');
+    // Pesukim run in; a parsha petucha ends the line (the next pasuk starts
+    // a new one) and a setuma leaves a wide space.
+    const pasukLines: TypesetLine[] = [];
+    let seg: ShapedWord[] = [];
+    const flush = () => {
+      if (seg.length) pasukLines.push(...setLines(seg, pasukW, pasukSize, pasukFont, 'main_source', pesukim[from]?.id ?? 'pasuk'));
+      seg = [];
+    };
+    for (let k = from; k < to; k++) {
+      seg.push(...shape(pesukim[k], pasukSize, pasukFont, pasukLabel(k)));
+      if (parshaAfter[k] === 'פ' && k < to - 1) flush();
+      else if (parshaAfter[k] === 'ס' && k < to - 1) {
+        const last = seg[seg.length - 1];
+        if (last) seg.push({ ...last, text: '\u2003', width: pasukSize * 1.2, isBold: false, isDibbur: false, footnoteMarker: undefined });
+      }
+    }
+    flush();
     const oUnits: ContentUnit[] = [];
     for (let k = from; k < to; k++) oUnits.push(...(onkByPasuk.get(k) ?? []));
     const onkLines = hasOnkelos
@@ -540,6 +566,12 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       y += rows * ll;
       if (take < lines.length) carry.set(b.key, lines.slice(take));
     }
+
+    // Every line of a page gets its own index: the screen preview keys its
+    // line elements by it, and bands / Onkelos restart at 0 — duplicate
+    // keys left the previous page's lines on screen, piled over this one.
+    sourceLines.forEach((l, i) => (l.lineIndex = i));
+    extra.forEach((l, i) => (l.lineIndex = sourceLines.length + i));
 
     const headingTexts: string[] = [];
     for (let k = cursor; k < bestTo; k++) if (headingBefore.has(k)) headingTexts.push(headingBefore.get(k)!);

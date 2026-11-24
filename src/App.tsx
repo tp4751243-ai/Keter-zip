@@ -170,6 +170,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useLanguage } from './i18n/LanguageContext';
+import { clearInkCache } from './engine/ink-clearance';
+import { HarfBuzzShaperEngine } from './engine/harfbuzz-emulator';
 
 // v0.3.1 (slim/fast): heavy panels are code-split out of the first-paint
 // bundle and load on demand only when the user opens them. The main editor,
@@ -1039,6 +1041,38 @@ export default function App() {
   );
 
   // 6. CORE TYPESETTING: Multi-page document calculation consuming shared designSettings
+  // Layout must be measured in the REAL faces. Web fonts load lazily, and
+  // a word measured before its face arrived is measured in a fallback —
+  // on screen the pesukim then ran together. Load the bundled faces up
+  // front; whenever any face finishes loading, forget the measurements
+  // and lay the book out again.
+  const [fontsVersion, setFontsVersion] = useState(0);
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.fonts) return;
+    let cancelled = false;
+    const relayout = () => {
+      if (cancelled) return;
+      HarfBuzzShaperEngine.clearMetricCache();
+      clearInkCache();
+      setFontsVersion(v => v + 1);
+    };
+    const faces = ['Frank Ruhl Libre', 'Noto Rashi Hebrew', 'Noto Serif Hebrew', 'David Libre'];
+    void Promise.all(
+      faces.flatMap(f => [400, 700].map(w => document.fonts.load(`${w} 16px "${f}"`, 'אבג').catch(() => [])))
+    ).then(relayout);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onLoadingDone = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(relayout, 150);
+    };
+    document.fonts.addEventListener('loadingdone', onLoadingDone);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.fonts.removeEventListener('loadingdone', onLoadingDone);
+    };
+  }, []);
+
   const bookDoc: BookTypesetDocument = useMemo(() => {
     const body = PaginationEngine.paginateDocument({
       title: documentTitle,
@@ -1111,6 +1145,7 @@ export default function App() {
     projectRules,
     localOverrides,
     designSettings,
+    fontsVersion,
   ]);
 
   // v0.3.0: whole-book balancing + anchored break instructions as guarded

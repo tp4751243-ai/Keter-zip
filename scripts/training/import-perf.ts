@@ -51,7 +51,8 @@ const timed = async <T>(label: string, f: () => T | Promise<T>): Promise<T> => {
 };
 
 async function main() {
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.docx')).sort((a, b) => (slotRole(a) === 'main_source' ? -1 : slotRole(b) === 'main_source' ? 1 : a.localeCompare(b)));
+  const SLOT_ORDER: ContentRole[] = ['main_source', 'verse', 'primary_comment', 'secondary_comment', 'tertiary_comment'];
+  const files = process.env.SLOT_ORDER ? fs.readdirSync(dir).filter(f => f.endsWith('.docx')).sort((a, b) => SLOT_ORDER.indexOf(slotRole(a)) - SLOT_ORDER.indexOf(slotRole(b))) : fs.readdirSync(dir).filter(f => f.endsWith('.docx')).sort((a, b) => (slotRole(a) === 'main_source' ? -1 : slotRole(b) === 'main_source' ? 1 : a.localeCompare(b)));
   const all: ContentUnit[] = [];
   let order = 0;
   for (const f of files) {
