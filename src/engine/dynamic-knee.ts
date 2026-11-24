@@ -104,6 +104,14 @@ export function resetTrialLineCacheStats(): void {
   trialLineCacheStats.candidateSolves = 0;
 }
 
+/**
+ * When one commentary ends on a page and the other continues, the Gemara
+ * spreads into the freed flank (as in the Vilna) instead of leaving a
+ * hole beside it. (Before, only a page with a very short commentary
+ * — ≤ 65 words — let the Gemara spread.)
+ */
+const commentaryHoleReclaim = (globalThis as { __KETER_NO_HOLE_RECLAIM?: boolean }).__KETER_NO_HOLE_RECLAIM !== true;
+
 export class DynamicKneeEngine {
   /**
    * Stage 3: Multi-candidate 2D contour & available-area constraint solver for a Rav-Text page.
@@ -1335,7 +1343,7 @@ export class DynamicKneeEngine {
             : 2;
         const canReclaimLeftFlank =
           !hasTosafot ||
-          (structuredTosafotWords.length <= 65 &&
+          ((structuredTosafotWords.length <= 65 || commentaryHoleReclaim) &&
             !fitsInSinglePrevWidthLine &&
             trialLeftExpandedLines >= 3);
         sLeft = !canReclaimLeftFlank
@@ -1379,7 +1387,7 @@ export class DynamicKneeEngine {
             : 2;
         const canReclaimRightFlank =
           !hasRashi ||
-          (structuredRashiWords.length <= 65 &&
+          ((structuredRashiWords.length <= 65 || commentaryHoleReclaim) &&
             !fitsInSinglePrevWidthLine &&
             trialRightExpandedLines >= 3);
         sRight = !canReclaimRightFlank
@@ -2121,12 +2129,23 @@ export class DynamicKneeEngine {
     const isLastOfStream = idx >= words.length;
     const nextStreamWord = idx < words.length ? words[idx] : null;
     const isBoundaryAfter = isLastOfStream || Boolean(nextStreamWord && nextStreamWord.unitId !== resolvedUnitId);
+    // A Vilna stream runs its paragraphs on (Gemara segments, Rashi and
+    // Tosafot dibburim continue on the same line). A paragraph that ends
+    // where a line happens to end is therefore NOT the end of the block:
+    // that line is justified like any other. Only the end of the stream,
+    // a heading, or a forced break ends a block.
+    const endsBlock =
+      isLastOfStream ||
+      endedUnitBoundary ||
+      isHeadingLine ||
+      Boolean(nextStreamWord && isHeadingRole(nextStreamWord.role));
     const isEndOfHeadingUnit =
       isHeadingLine && (!nextStreamWord || nextStreamWord.unitId !== resolvedUnitId);
     const isLastLine = isLastOfStream || isEndOfHeadingUnit;
 
     const spaceCount = lineWords.filter(w => w.isSpace).length;
-    const deficit = targetWidth - currentWidth;
+    // the width the line may fill: the column less this line's indents
+    const deficit = effectiveTargetWidth - currentWidth;
     let isJustified = false;
     let extraSpace = 0;
 
@@ -2157,7 +2176,7 @@ export class DynamicKneeEngine {
     ) {
       isJustified = true;
       extraSpace = deficit / spaceCount;
-      currentWidth = targetWidth;
+      currentWidth = effectiveTargetWidth;
     }
 
     const hasDibburOnLine = lineWords.some(w => w.isDibbur);
@@ -2195,7 +2214,7 @@ export class DynamicKneeEngine {
       lineHorizontalScalePercent = lineHorizontalScalePercent ?? resolved.character.horizontalScalePercent;
       lineBaselineShiftPt = lineBaselineShiftPt ?? resolved.character.baselineShiftPt;
       const isLastOfUnit = isBoundaryAfter;
-      lineParagraphAlignment = isLastOfUnit
+      lineParagraphAlignment = endsBlock
         ? resolved.paragraph.lastLineAlignment
         : resolved.paragraph.alignment;
       const ind = computeParagraphLineIndents(resolved.paragraph, lineIndexInUnit);

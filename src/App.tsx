@@ -145,7 +145,8 @@ import {
   StructuredDiagnostic,
   TypesetLine,
 } from './types/typesetter';
-import { PaginationEngine } from './engine/pagination-engine';
+import { PaginationEngine, type PaginationInput } from './engine/pagination-engine';
+import { backgroundLayoutAvailable, layoutInBackground } from './engine/layout-client';
 import { DocxImporter } from './engine/docx-importer';
 import { buildBackOfTitlePage, buildTitlePageResult } from './engine/toc-engine';
 import { seferTypeForLayout, seferTypeForRecipe, type SeferType } from './engine/sefer-type';
@@ -278,6 +279,9 @@ function loadInitialBootState(): InitialBootState {
     recoveredFromBackup: false,
   };
 }
+
+/** Books above this many paragraphs are laid out in the background worker. */
+const BACKGROUND_LAYOUT_MIN_UNITS = 400;
 
 export default function App() {
   const { t, tf, dir, lang, toggleLanguage } = useLanguage();
@@ -1047,6 +1051,7 @@ export default function App() {
   // front; whenever any face finishes loading, forget the measurements
   // and lay the book out again.
   const [fontsVersion, setFontsVersion] = useState(0);
+  const [backgroundLayoutFailed, setBackgroundLayoutFailed] = useState(false);
   useEffect(() => {
     if (typeof document === 'undefined' || !document.fonts) return;
     let cancelled = false;
@@ -1073,8 +1078,9 @@ export default function App() {
     };
   }, []);
 
-  const bookDoc: BookTypesetDocument = useMemo(() => {
-    const body = PaginationEngine.paginateDocument({
+  // The layout input (cheap to build; the layout itself is the cost).
+  const layoutInput: PaginationInput = useMemo(
+    () => ({
       title: documentTitle,
       layoutType,
       units: contentUnits,
@@ -1106,7 +1112,77 @@ export default function App() {
       projectRules,
       localOverrides,
       designSettings,
-    });
+    }),
+    // fontsVersion: a font that finished loading changes the measurements
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+    documentTitle,
+    layoutType,
+    contentUnits,
+    ravTextLinks,
+    geometry,
+    paginationGeometry,
+    kneeSettings,
+    selectedFont,
+    selectedRashiFont,
+    selectedTosafotFont,
+    enableOrnaments,
+    rulesConfig,
+    projectRules,
+    localOverrides,
+    designSettings,
+    fontsVersion,
+  ]
+  );
+
+  // T13 — a book that is not small is laid out in a background worker, so
+  // the window never freezes (a whole tractate takes about a minute, and
+  // every edit re-lays the book out). The pages on screen stay until the
+  // new layout is ready. Small books lay out at once, as before.
+  const useBackgroundLayout =
+    backgroundLayoutAvailable() && contentUnits.length > BACKGROUND_LAYOUT_MIN_UNITS && !backgroundLayoutFailed;
+  const syncBody: BookTypesetDocument | null = useMemo(
+    () => (useBackgroundLayout ? null : PaginationEngine.paginateDocument(layoutInput)),
+    [layoutInput, useBackgroundLayout]
+  );
+  const [asyncBody, setAsyncBody] = useState<BookTypesetDocument | null>(null);
+  const [layoutPending, setLayoutPending] = useState(false);
+  useEffect(() => {
+    if (!useBackgroundLayout) {
+      setLayoutPending(false);
+      return;
+    }
+    let cancelled = false;
+    setLayoutPending(true);
+    // a short pause lets fast edits settle into one layout
+    const timer = setTimeout(() => {
+      layoutInBackground(layoutInput)
+        .then(({ doc }) => {
+          if (cancelled) return;
+          setAsyncBody(doc);
+          setLayoutPending(false);
+        })
+        .catch(err => {
+          if (cancelled || String(err?.message) === 'superseded') return;
+          console.warn('Background layout unavailable; laying out on the main thread.', err);
+          setBackgroundLayoutFailed(true);
+          setLayoutPending(false);
+        });
+    }, 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [layoutInput, useBackgroundLayout]);
+  // Until the first background layout of a book is ready, show the
+  // engine's empty-book page rather than nothing.
+  const placeholderBody = useMemo(
+    () => (useBackgroundLayout && !asyncBody ? PaginationEngine.paginateDocument({ ...layoutInput, units: [], links: [], anchorLinks: [] }) : null),
+    [useBackgroundLayout, asyncBody, layoutInput]
+  );
+
+  const bookDoc: BookTypesetDocument = useMemo(() => {
+    const body = (syncBody ?? asyncBody ?? placeholderBody)!;
     // v0.5.0 (Title Page / Shaar Blat builder): the title page is the
     // book's first page — a synthetic page (no typeset lines) that the
     // renderers draw from `designSettings.titlePage`. The body pages that
@@ -1129,24 +1205,7 @@ export default function App() {
       })),
     ];
     return { ...body, pages, totalPages: pages.length };
-  }, [
-    documentTitle,
-    layoutType,
-    contentUnits,
-    ravTextLinks,
-    geometry,
-    paginationGeometry,
-    kneeSettings,
-    selectedFont,
-    selectedRashiFont,
-    selectedTosafotFont,
-    enableOrnaments,
-    rulesConfig,
-    projectRules,
-    localOverrides,
-    designSettings,
-    fontsVersion,
-  ]);
+  }, [syncBody, asyncBody, placeholderBody, geometry, layoutType, designSettings, documentTitle]);
 
   // v0.3.0: whole-book balancing + anchored break instructions as guarded
   // post-passes over the paginated pages (pagination itself is untouched).
@@ -2159,6 +2218,12 @@ export default function App() {
   // when a file was actually downloaded, so the export view does not show
   // a success notice after a failure.
   const handleExportPdf = async (allPages: boolean = true, customFileName?: string): Promise<boolean> => {
+    // The pages on screen are the previous layout while a new one is being
+    // made: export only the finished, current book.
+    if (layoutPending) {
+      window.alert('העימוד עדיין מתעדכן. המתינו שההודעה "מעמד את הספר" תיעלם ונסו שוב.');
+      return false;
+    }
     setIsExportingPdf(true);
     // v0.6.0 (Part B): export what is on screen — manual page breaks
     // included. The old code exported `bookDoc.pages`, so a split never
@@ -3622,6 +3687,17 @@ export default function App() {
       data-theme={uiTheme}
       className="h-screen w-screen flex flex-col bg-[var(--ui-app-bg)] text-[var(--ui-text-primary)] overflow-hidden font-sans select-none transition-colors duration-150"
     >
+      {layoutPending && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="layout-pending"
+          className="fixed bottom-16 start-4 z-50 flex items-center gap-2 rounded-full bg-[var(--ui-panel-bg,#fff)] px-3 py-1.5 text-xs shadow-lg border border-[var(--ui-border,#ddd)]"
+        >
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          {asyncBody ? 'מעדכן את העימוד…' : 'מעמד את הספר…'}
+        </div>
+      )}
       {/* Hidden input fallback for loading .keter / .keter.json project files */}
       <input
         ref={projectFileInputRef}

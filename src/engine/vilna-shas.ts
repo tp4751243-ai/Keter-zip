@@ -875,10 +875,24 @@ export function applyVilnaShasDefaults(settings: ProfessionalDesignSettings): Pr
   next = DesignSettingsEngine.updateRoleStyle(
     next,
     'main_source',
-    { paragraph: { alignment: 'justify', firstLineIndentPt: 0, hangingIndentPt: 12 } },
+    // The Vilna Gemara block is one solid justified run: no first-line or
+    // hanging indent (an indent pushed every line 12pt into the gutter).
+    { paragraph: { alignment: 'justify', lastLineAlignment: 'right', firstLineIndentPt: 0, hangingIndentPt: 0 } },
     'user',
-    'Vilna Shas: second-row indent'
+    'Vilna Shas: solid justified Gemara block'
   ).settings;
+  // In the Vilna Shas, Tosafot is set in Rashi script like Rashi (the
+  // square letter is for the Gemara only).
+  const rashiScript = DesignSettingsEngine.resolveStyle(next, { role: 'primary_comment' }).character.fontFamily;
+  if (rashiScript) {
+    next = DesignSettingsEngine.updateRoleStyle(
+      next,
+      'secondary_comment',
+      { character: { fontFamily: rashiScript } },
+      'user',
+      'Vilna Shas: Tosafot in Rashi script'
+    ).settings;
+  }
   next = DesignSettingsEngine.updateRavTextSettings(next, { dibburHamatchilBold: true }, 'user');
   // v0.8.0 Part C (§7): Vilna defaults also switch the centred decorative
   // Michtav box on for the first daf (toggleable in the design panel).

@@ -478,6 +478,34 @@ function scorePage(
     detail: `${overlaps} overlapping line pairs, ${escaped} lines off the page${overlapEx.length ? ` (e.g. ${overlapEx.join('; ')})` : ''}`,
   });
 
+  // G1 — a clear gutter between neighbouring columns: the drawn words of
+  // two lines from different streams that share a band are at least 6pt
+  // apart (the user's Berakhot report: indented Gemara lines were spread
+  // to the full width and ran into the commentary with no gap at all).
+  let tight = 0;
+  const tightEx: string[] = [];
+  const inked = ls.filter(l => l.words.length);
+  for (let i2 = 0; i2 < inked.length; i2++)
+    for (let j = i2 + 1; j < inked.length; j++) {
+      const a2 = inked[i2];
+      const b2 = inked[j];
+      if (a2.role === b2.role && Math.abs(a2.xLeft - b2.xLeft) < 1) continue;
+      if (!(a2.yBottom - 1 > b2.yTop && b2.yBottom - 1 > a2.yTop)) continue;
+      const aL = Math.min(...a2.words.map(w => w.xLeft)), aR = Math.max(...a2.words.map(w => w.xRight));
+      const bL = Math.min(...b2.words.map(w => w.xLeft)), bR = Math.max(...b2.words.map(w => w.xRight));
+      const gap = Math.max(bL - aR, aL - bR);
+      if (gap < 6) {
+        tight++;
+        if (tightEx.length < 2) tightEx.push(`${a2.role} × ${b2.role} gap ${gap.toFixed(1)}pt`);
+      }
+    }
+  out.push({
+    id: 'G1',
+    label: 'Clear gutter (≥ 6pt) between neighbouring columns',
+    status: tight === 0 ? 'pass' : 'fail',
+    detail: `${tight} line pairs closer than 6pt${tightEx.length ? ` (e.g. ${tightEx.join('; ')})` : ''}`,
+  });
+
   // A1 — amud alignment (info): which Vilna amudim this page's Gemara came from.
   const amudim = new Map<string, number>();
   for (const l of plan.lines.filter(x => isSource(x.role))) {

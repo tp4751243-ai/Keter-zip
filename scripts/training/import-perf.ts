@@ -51,6 +51,7 @@ const timed = async <T>(label: string, f: () => T | Promise<T>): Promise<T> => {
 };
 
 async function main() {
+  if (process.env.DBG) (globalThis as any).__DBG = 1;
   const SLOT_ORDER: ContentRole[] = ['main_source', 'verse', 'primary_comment', 'secondary_comment', 'tertiary_comment'];
   const files = process.env.SLOT_ORDER ? fs.readdirSync(dir).filter(f => f.endsWith('.docx')).sort((a, b) => SLOT_ORDER.indexOf(slotRole(a)) - SLOT_ORDER.indexOf(slotRole(b))) : fs.readdirSync(dir).filter(f => f.endsWith('.docx')).sort((a, b) => (slotRole(a) === 'main_source' ? -1 : slotRole(b) === 'main_source' ? 1 : a.localeCompare(b)));
   const all: ContentUnit[] = [];
@@ -151,9 +152,52 @@ async function main() {
     fs.mkdirSync(process.env.RENDER_DIR, { recursive: true });
     const body = doc.pages.filter(p => !p.isTitlePage);
     const firstPasuk = body.findIndex(p => !p.chumashIntro);
-    for (const i of [0, 1, firstPasuk, firstPasuk + 1, firstPasuk + 40].filter(i => i >= 0 && i < body.length)) {
+    for (const i of (process.env.RENDER_PAGES ? process.env.RENDER_PAGES.split(",").map(Number) : [0, 1, firstPasuk, firstPasuk + 1, firstPasuk + 40]).filter(i => i >= 0 && i < body.length)) {
       fs.writeFileSync(path.join(process.env.RENDER_DIR, `p${i}.png`), (PdfExporter.renderPageToCanvas(body[i], 1.4) as any).toBuffer('image/png'));
     }
+  }
+  if (process.env.OVERLAP) {
+    // Collision check: words of two different lines that share a vertical
+    // band must not share horizontal space (the user's Gemara report).
+    const { PdfExporter } = await import('../../src/engine/pdf-exporter');
+    const mc = createCanvas(10, 10).getContext('2d');
+    let pagesHit = 0, total = 0, inkOver = 0;
+    const body = doc.pages.filter(p => !p.isTitlePage);
+    for (let pi = 0; pi < body.length; pi++) {
+      const plan = PdfExporter.buildPageRenderPlan(body[pi]);
+      const lines = plan.lines.filter(l => l.words.length);
+      let hits = 0;
+      const ex: string[] = [];
+      for (let a = 0; a < lines.length; a++) for (let b = a + 1; b < lines.length; b++) {
+        const A = lines[a], B = lines[b];
+        const vy = Math.min(A.yBaseline, B.yBaseline) - Math.max(A.yBaseline - A.fontSizePt * 0.7, B.yBaseline - B.fontSizePt * 0.7);
+        if (vy <= 0.5) continue;
+        for (const wa of A.words) for (const wb of B.words) {
+          const ov = Math.min(wa.xRight, wb.xRight) - Math.max(wa.xLeft, wb.xLeft);
+          if (ov > -6) { hits++; if (ex.length < 4) ex.push(`${A.role}#${A.lineIndex}「${wa.text}」 × ${B.role}#${B.lineIndex}「${wb.text}」 ov=${ov.toFixed(1)}`); }
+        }
+      }
+      // ink wider than the solved box (drawn glyphs run past the slot)
+      for (const l of lines) for (const w of l.words) {
+        mc.font = `${w.isBold ? 'bold ' : ''}${w.fontSizePt}px "${w.fontFamily}"`;
+        const m = mc.measureText(w.text).width * (w.horizontalScalePercent || 100) / 100;
+        if (m > w.width + 1.5) { inkOver++; if (ex.length < 6) ex.push(`ink ${w.role} 「${w.text}」 drawn ${m.toFixed(1)} > slot ${w.width.toFixed(1)} (${w.fontFamily})`); }
+      }
+      if (hits) pagesHit++;
+      total += hits;
+      if (ex.length && pi < Number(process.env.OVERLAP_PAGES ?? 6)) console.log(`page ${pi}: ${hits} collisions\n   ` + ex.join('\n   '));
+    }
+    if (process.env.SRC_DUMP) {
+      for (const l of body[Number(process.env.SRC_DUMP)].sourceLines.slice(3, 9)) console.log([...new Set(l.words.filter(w => !w.isSpace).map(w => w.unitId))].join(" "), l.unitBoundaryAfter, `SRC just=${l.isJustified} last=${l.isLastLine} w=${l.width.toFixed(1)} tw=${l.targetWidth.toFixed(1)} ex=${l.extraSpacePerWord.toFixed(2)} al=${(l as any).paragraphAlignment} hang=${(l as any).hangingIndentPt} words=${l.words.filter(w => !w.isSpace).length} sum=${l.words.reduce((a, w) => a + w.width, 0).toFixed(1)}`);
+    }
+    if (process.env.LINE_DUMP) {
+      const plan = PdfExporter.buildPageRenderPlan(body[Number(process.env.LINE_DUMP)]);
+      for (const l of [...plan.lines].sort((a, b) => a.yBaseline - b.yBaseline)) {
+        const wl = Math.min(...l.words.map(w => w.xLeft)), wr = Math.max(...l.words.map(w => w.xRight));
+        console.log(`${l.role.padEnd(18)} y=${l.yBaseline.toFixed(1)} line[${l.xLeft.toFixed(1)},${l.xRight.toFixed(1)}] tw=${l.targetWidth.toFixed(1)} ink[${wl.toFixed(1)},${wr.toFixed(1)}] just=${l.isJustified} last=${l.isLastLine} al=${l.alignment} ind=${l.rightIndentPt}/${l.leftIndentPt}/${l.firstLineIndentPt}/${l.hangingIndentPt} n=${l.words.length} 「${l.words.slice(-1)[0]?.text}」`);
+      }
+    }
+    console.log(`OVERLAP pages with collisions ${pagesHit}/${body.length}, word collisions ${total}, words drawn wider than their slot ${inkOver}`);
   }
   if (process.env.PDF) {
     const { PdfExporter } = await import('../../src/engine/pdf-exporter');

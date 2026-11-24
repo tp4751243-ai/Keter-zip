@@ -258,6 +258,13 @@ function idbDelete(family: string): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 const loadedFaces = new Map<string, FontFace>();
+/** The bytes of every registered user font (the background layout worker measures with them). */
+const loadedFontData = new Map<string, { family: string; data: ArrayBuffer }>();
+
+/** User fonts registered in this session, as bytes (for the layout worker). */
+export function registeredFontBinaries(): Array<{ family: string; data: ArrayBuffer }> {
+  return [...loadedFontData.values()].map(f => ({ family: f.family, data: f.data.slice(0) }));
+}
 
 /** Registers a font binary for on-screen rendering; returns false on failure. */
 async function registerFontFace(family: string, data: ArrayBuffer): Promise<boolean> {
@@ -266,6 +273,7 @@ async function registerFontFace(family: string, data: ArrayBuffer): Promise<bool
     await face.load();
     document.fonts.add(face);
     loadedFaces.set(family.toLowerCase(), face);
+    loadedFontData.set(family.toLowerCase(), { family, data: data.slice(0) });
     return true;
   } catch {
     return false;
@@ -674,6 +682,7 @@ export async function removeCustomFont(family: string): Promise<void> {
       // ignore — the face stays registered for this session only
     }
     loadedFaces.delete(family.toLowerCase());
+    loadedFontData.delete(family.toLowerCase());
   }
   try {
     await idbDelete(family);
