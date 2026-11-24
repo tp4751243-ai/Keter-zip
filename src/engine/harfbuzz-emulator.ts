@@ -355,7 +355,12 @@ export class HarfBuzzShaperEngine {
     for (let idx = 0; idx < chars.length; idx++) {
       const ch = chars[idx];
       const cp = ch.codePointAt(0) || 0;
-      const isMark = cp >= 0x0591 && cp <= 0x05c7;
+      // Hebrew combining marks (Unicode Mn). Maqaf ־ (05BE), paseq ׀ (05C0),
+      // sof pasuq ׃ (05C3) and nun hafukha ׆ (05C6) are spacing punctuation:
+      // measured as marks they had no width, and a paseq standing alone was
+      // reported as "an orphan nikud mark" — which blocked PDF export.
+      const isMark =
+        cp >= 0x0591 && cp <= 0x05c7 && cp !== 0x05be && cp !== 0x05c0 && cp !== 0x05c3 && cp !== 0x05c6;
       const markInfo = HEBREW_MARKS_INFO[cp];
 
       let xAdvance = 0;

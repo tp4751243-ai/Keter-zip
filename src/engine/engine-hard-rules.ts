@@ -864,6 +864,10 @@ export const ENGINE_HARD_RULES: ReadonlyArray<EngineHardRuleDefinition> = Object
             ...(p.column2Lines ?? []),
             ...p.rashiLines,
             ...p.tosafotLines,
+            // Mikraot Gedolot keeps its commentary bands (and Onkelos) in
+            // marginLines; the tertiary band has its own stream.
+            ...(p.marginLines ?? []),
+            ...(p.tertiaryLines ?? []),
           ]) {
             if (ln.unitId) allPlacedUnitIds.add(ln.unitId);
             for (const w of ln.words) {
@@ -891,6 +895,8 @@ export const ENGINE_HARD_RULES: ReadonlyArray<EngineHardRuleDefinition> = Object
           ...(page.column2Lines ?? []),
           ...page.rashiLines,
           ...page.tosafotLines,
+          ...(page.marginLines ?? []),
+          ...(page.tertiaryLines ?? []),
         ]) {
           if (ln.unitId) pageUnitIds.add(ln.unitId);
           for (const w of ln.words) {
@@ -907,6 +913,8 @@ export const ENGINE_HARD_RULES: ReadonlyArray<EngineHardRuleDefinition> = Object
             ...ctx.nextPage.sourceLines,
             ...ctx.nextPage.rashiLines,
             ...ctx.nextPage.tosafotLines,
+            ...(ctx.nextPage.marginLines ?? []),
+            ...(ctx.nextPage.tertiaryLines ?? []),
           ]) {
             if (ln.unitId) nextPageUnitIds.add(ln.unitId);
             for (const w of ln.words) {

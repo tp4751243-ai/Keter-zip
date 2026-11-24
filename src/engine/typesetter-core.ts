@@ -172,7 +172,7 @@ export class TypesetterEngine {
         .split(/\s+/)
         .filter(Boolean)
         .reduce<string[]>((acc, t) => {
-          if (acc.length > 0 && /^[:;,.!?׃\u05C3)\]״"']+$/.test(t)) acc[acc.length - 1] += t;
+          if (acc.length > 0 && /^[:;,.!?׃\u05C3\u05C0)\]״"']+$/.test(t)) acc[acc.length - 1] += t;
           else acc.push(t);
           return acc;
         }, []);
@@ -275,7 +275,7 @@ export class TypesetterEngine {
     // "(עירובין כב א)" + " : היום") joins the word before it.
     for (let i = words.length - 1; i > 0; i--) {
       const w = words[i];
-      if (w.footnoteMarker === undefined && /^[:;,.!?׃\u05C3)\]״"']+$/.test(w.text)) {
+      if (w.footnoteMarker === undefined && /^[:;,.!?׃\u05C3\u05C0)\]״"']+$/.test(w.text)) {
         const prev = words[i - 1];
         prev.text += w.text;
         prev.width += w.width;

@@ -228,7 +228,11 @@ export class PdfNativeTextEngine {
     const clusters: string[] = [];
     for (const ch of cleaned) {
       const cp = ch.codePointAt(0) ?? 0;
-      if (cp >= 0x0591 && cp <= 0x05C7 && clusters.length > 0) {
+      // Combining marks join their letter; maqaf ־, paseq ׀, sof pasuq ׃
+      // and nun hafukha ׆ are spacing punctuation (own cluster) — glued to
+      // the letter, the sof pasuq was drawn inside the word.
+      const isMark = cp >= 0x0591 && cp <= 0x05C7 && cp !== 0x05BE && cp !== 0x05C0 && cp !== 0x05C3 && cp !== 0x05C6;
+      if (isMark && clusters.length > 0) {
         clusters[clusters.length - 1] += ch;
       } else {
         clusters.push(ch);
@@ -354,6 +358,56 @@ export class PdfNativeTextEngine {
    * is never overwritten. The surrounding `/ActualText` preserves logical-order Unicode text,
    * including combining marks that are not available as visible glyphs in the selected font.
    */
+  /**
+   * A cluster as TJ items with its marks POSITIONED over the letter.
+   * jsPDF applies no OpenType mark attachment (GPOS), so marks were drawn
+   * wherever the font's default origin put them — nikkud and teamim off
+   * their letters in every pointed line. Each mark is centred over the
+   * letter's ink using the glyph boxes (shin dot to the right, sin dot and
+   * holam to the left), and the pen returns after it. TJ numbers are in
+   * thousandths of an em; a positive number moves the pen LEFT.
+   */
+  private static encodeClusterItems(meta: any, cluster: string): string[] {
+    const chars = Array.from(cluster);
+    if (chars.length === 1) return [this.registerAndEncodeClusterHex(meta, cluster)];
+    const upm: number = meta.head?.unitsPerEm || 1000;
+    const k = 1000 / upm;
+    const bbox = (gid: number): [number, number] | null => {
+      try {
+        const g = meta.glyf?.glyphFor?.(gid);
+        return g && Number.isFinite(g.xMin) && g.xMax > g.xMin ? [g.xMin * k, g.xMax * k] : null;
+      } catch {
+        return null;
+      }
+    };
+    const baseGid: number = meta.characterToGlyph(chars[0].charCodeAt(0)) || 0;
+    const bW: number = meta.widthOfGlyph(baseGid) || 0;
+    const bb = bbox(baseGid) ?? [0, bW];
+    const items: string[] = [this.registerAndEncodeClusterHex(meta, chars[0])];
+    for (const ch of chars.slice(1)) {
+      const code = ch.charCodeAt(0);
+      const gid: number = meta.characterToGlyph(code) || 0;
+      if (!gid) continue; // the font has no glyph for this mark
+      const aW: number = meta.widthOfGlyph(gid) || 0;
+      const mb = bbox(gid);
+      if (!mb) {
+        items.push(this.registerAndEncodeClusterHex(meta, ch));
+        continue;
+      }
+      const mHalf = (mb[1] - mb[0]) / 2;
+      const target =
+        code === 0x05c1 ? bb[1] - mHalf // shin dot: right
+        : code === 0x05c2 || code === 0x05b9 ? bb[0] + mHalf // sin dot, holam: left
+        : (bb[0] + bb[1]) / 2; // everything else: centred
+      // pen is at bW (after the base); the mark's centre is pen + (m0+m1)/2
+      const d = bW + (mb[0] + mb[1]) / 2 - target;
+      items.push(String(Math.round(d)));
+      items.push(this.registerAndEncodeClusterHex(meta, ch));
+      items.push(String(Math.round(aW - d)));
+    }
+    return items;
+  }
+
   private static registerAndEncodeClusterHex(meta: any, cluster: string): string {
     let hex = '';
     for (let i = 0; i < cluster.length; i++) {
@@ -447,7 +501,7 @@ export class PdfNativeTextEngine {
       startXPt = options.xRight - (totalW1000 / 1000) * options.fontSizePt * scaleRatio;
 
       for (let i = clusters.length - 1; i >= 0; i--) {
-        items.push(this.registerAndEncodeClusterHex(meta, clusters[i]));
+        items.push(...this.encodeClusterItems(meta, clusters[i]));
         if (i > 0 && Math.abs(tracking1000) > 0.5) {
           // Negative TJ adjustments add the requested tracking while the text cursor moves right.
           items.push(String(Math.round(-tracking1000)));
@@ -462,7 +516,7 @@ export class PdfNativeTextEngine {
       startXPt = options.xRight - naturalWPt;
 
       for (let i = 0; i < clusters.length; i++) {
-        items.push(this.registerAndEncodeClusterHex(meta, clusters[i]));
+        items.push(...this.encodeClusterItems(meta, clusters[i]));
         if (i + 1 < clusters.length && Math.abs(tracking1000) > 0.5) {
           items.push(String(Math.round(-tracking1000)));
         }

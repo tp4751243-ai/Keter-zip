@@ -48,6 +48,7 @@ import { applyRecipeToSettingsById } from '../../src/engine/auto-layout';
 import { HISTORICAL_LAYOUTS } from '../../src/engine/historical-layouts';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 import { DocxImporter } from '../../src/engine/docx-importer';
+import { PdfExporter } from '../../src/engine/pdf-exporter';
 
 const SAMPLES: Record<string, () => ContentUnit[]> = {
   rav_text: () => DocxImporter.getSampleBerakhot(),
@@ -157,6 +158,16 @@ for (const c of cases) {
     0
   );
   if (outWords < inWords * 0.9) problems.push(`text lost: ${outWords}/${inWords} words placed`);
+  // Every type must also EXPORT: the hard rules gate PDF export, and a rule
+  // that does not know a layout's streams blocked Mikraot Gedolot export.
+  try {
+    console.log = (...a: unknown[]) => { if (typeof a[0] === 'string' && a[0].startsWith('Diagnostic:')) return; origLog(...a); };
+    await PdfExporter.generateMultiPagePdf(doc, () => {}, { purpose: 'print' });
+  } catch (e) {
+    problems.push(`PDF export blocked: ${String((e as Error)?.message ?? e).slice(0, 160)}`);
+  } finally {
+    console.log = origLog;
+  }
   rows.push({ name: c.name, path: c.path, layout: layoutType, pages: pages.length, leaks, problems });
 }
 

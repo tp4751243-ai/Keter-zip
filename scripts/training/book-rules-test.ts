@@ -16,6 +16,7 @@ import { rtlPlacementOrder } from '../../src/engine/bidi-runs';
 import { TypesetterEngine } from '../../src/engine/typesetter-core';
 import type { ContentUnit, PageTypesetResult } from '../../src/types/typesetter';
 import { jsPDF } from 'jspdf';
+import { PdfNativeTextEngine } from '../../src/engine/pdf-native-text-engine';
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = '') => {
@@ -98,6 +99,14 @@ check('pure Hebrew unchanged', ord('בראשית ברא אלהים') === 'ברא
   const screen = new jsPDF({ unit: 'pt', format: [420, 595] });
   PdfExporter.applyPrintBoxes(screen, 0);
   check('screen PDF (no bleed) has no print boxes', !/TrimBox/.test(screen.output()));
+}
+
+// PDF text: sof pasuq / maqaf / paseq are punctuation, never glued to a letter.
+{
+  const cl = PdfNativeTextEngine.splitHebrewGraphemeClusters('הַמָּיִם׃');
+  check('sof pasuq is its own PDF cluster', cl[cl.length - 1] === '׃', cl.join('|'));
+  const mq = PdfNativeTextEngine.splitHebrewGraphemeClusters('עַל־פְּנֵי');
+  check('maqaf is its own PDF cluster', mq.includes('־'), mq.join('|'));
 }
 
 console.log(fails ? `${fails} FAILED` : 'all book rules pass');

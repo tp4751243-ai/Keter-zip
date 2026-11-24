@@ -133,6 +133,15 @@ async function main() {
       fs.writeFileSync(path.join(process.env.RENDER_DIR, `p${i}.png`), (PdfExporter.renderPageToCanvas(body[i], 1.4) as any).toBuffer('image/png'));
     }
   }
+  if (process.env.PDF) {
+    const { PdfExporter } = await import('../../src/engine/pdf-exporter');
+    try {
+      const blob: any = await timed('pdf export (print)', () => PdfExporter.generateMultiPagePdf(doc, () => {}, { purpose: 'print', pageRange: process.env.PDF === 'all' ? null : { from: 1, to: Number(process.env.PDF) } }));
+      console.log('PDF bytes', blob?.size ?? blob?.length);
+    } catch (e: any) {
+      console.log('PDF ERROR', e?.message ?? e, '\n', (e?.stack ?? '').split('\n').slice(0, 8).join('\n'));
+    }
+  }
   const total = times.reduce((s, [, t]) => s + t, 0);
   console.log(`TOTAL ${total.toFixed(0)} ms`);
   if (budget && total > budget) { console.log(`over budget ${budget} ms`); process.exit(1); }

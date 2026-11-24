@@ -998,6 +998,16 @@ export class PaginationEngine {
                   shiftLine(ln);
                 }
               }
+              // Footnotes / bands that share the column below the frame move
+              // with it (a custom-box design flows footnotes in the Gemara
+              // box: pushing only the Gemara laid it over its footnotes and
+              // the export hard rules blocked the PDF).
+              for (const ln of [...pg.footnoteLines, ...(pg.tertiaryLines ?? []), ...(pg.sideNoteLines ?? [])]) {
+                const lnTop = ln.yTop ?? ln.yBaseline - ln.ascent;
+                const lx = ln.xLeft ?? 0;
+                const rx = ln.xRight ?? pgContentW;
+                if (lnTop >= baseTop - 1 && rx > boxLeft - 2 && lx < boxRight + 2) shiftLine(ln);
+              }
               if (pg.transitionMarkers) {
                 for (const tm of pg.transitionMarkers) {
                   if (tm.yTop >= baseTop - 1) {
@@ -2056,6 +2066,11 @@ export class PaginationEngine {
           width += wWidth;
           q.next++;
         }
+        // A paragraph ends its line: the next unit (a heading's body, a
+        // footnote after the Gemara) starts a new one. Running units into
+        // one line merged a heading with its text and Gemara with a
+        // footnote — and the export hard rules then blocked the PDF.
+        if (q.next >= q.words.length) break outer;
       }
       if (words.length === 0) return null;
       const nonSpace = words.filter(w => !w.isSpace);
