@@ -86,8 +86,21 @@ const PUNCT_RE = /[״״"׳'.,:;!?—–\-()[\]{}<>׀]/g;
  * secondary key `normalizeHebrewForMatchingKtivInsensitive` — dropping
  * matres lectionis in the primary key would over-merge distinct words.
  */
+const MATCH_CACHE = new Map<string, string>();
 export function normalizeHebrewForMatching(text: string): string {
   if (!text) return '';
+  if (text.length <= 64) {
+    const hit = MATCH_CACHE.get(text);
+    if (hit !== undefined) return hit;
+    const out = normalizeHebrewForMatchingUncached(text);
+    if (MATCH_CACHE.size > 200000) MATCH_CACHE.clear();
+    MATCH_CACHE.set(text, out);
+    return out;
+  }
+  return normalizeHebrewForMatchingUncached(text);
+}
+
+function normalizeHebrewForMatchingUncached(text: string): string {
   let out = stripNikudTaamim(text);
   out = out.replace(DIBBUR_PREFIX_RE, '');
   // Gershayim / gersh / ASCII quotes sit INSIDE words (רש״י, ד״ה) — they
@@ -108,8 +121,16 @@ export function normalizeHebrewForMatching(text: string): string {
  * `normalizeKtiv`). דוד and דָּוִד both reduce to the same key.
  * Used only as a fallback equality test, never as the primary key.
  */
+// Words recur thousands of times in a whole book (every comparison of a
+// dibbur word with a source word normalizes both): cache by string.
+const KTIV_CACHE = new Map<string, string>();
 export function normalizeHebrewForMatchingKtivInsensitive(text: string): string {
-  return normalizeKtiv(normalizeHebrewForMatching(text));
+  const hit = KTIV_CACHE.get(text);
+  if (hit !== undefined) return hit;
+  const out = normalizeKtiv(normalizeHebrewForMatching(text));
+  if (KTIV_CACHE.size > 200000) KTIV_CACHE.clear();
+  KTIV_CACHE.set(text, out);
+  return out;
 }
 
 /** Normalise one word for matching (primary key). */

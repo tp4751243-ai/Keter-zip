@@ -42,6 +42,7 @@ import { detectCommentator } from './auto-layout';
 import { hebrewNumeralBare } from './hebrew-numerals';
 import { fontLacksTeamim, TEAMIM_FALLBACK_FONT, wordHasTeamim } from './font-analyzer';
 import { requiredPitch } from './ink-clearance';
+import { chapterNumbers, chumashPositions, leadingPasukNumber, linkChumashCommentaries } from './chumash-linker';
 
 /** Fitted proportions (from the user's Chumash photos: line pitch ratios). */
 export const MG_FIT = {
@@ -142,14 +143,49 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   const onkelosUnits: ContentUnit[] = [];
   const headingBefore = new Map<number, string>(); // pasuk index → heading text before it
   const commentaries: Array<{ unit: ContentUnit; order: number }> = [];
+  // T12 — chapter / pasuk of every unit (per uploaded file): pasuk numbers
+  // restart each chapter, "(א)" typed in the file is not printed twice,
+  // and a commentary's introduction (before its first "פרק") gets pages
+  // of its own before the pesukim.
+  const positions = chumashPositions(units);
+  const pasukNumber: number[] = [];
+  const intro: ContentUnit[] = [];
+  const stripNumber = (u: ContentUnit): ContentUnit => {
+    const lead = leadingPasukNumber(u.rawText);
+    return lead ? { ...u, rawText: lead.rest, textRuns: undefined } : u;
+  };
+  let chapterCounter = new Map<number, number>();
+  const mainFile = units.find(x => x.role === 'main_source')?.importFileIndex;
+  // Each uploaded commentary file is ONE band, titled from the file's own
+  // title ("רמב\"ן על בראשית" → רמב״ן).
+  const fileTitle = new Map<number, string>();
+  for (const u of units) {
+    if (u.importFileIndex === undefined || fileTitle.has(u.importFileIndex)) continue;
+    if (u.role === 'chapter' || u.role === 'main_title' || u.role === 'heading') {
+      const t = u.rawText.replace(/[\u0591-\u05C7]/g, '').replace(/\s+על\s+.*$/, '').replace(/"/g, '״').trim();
+      if (t && t.split(/\s+/).length <= 4) fileTitle.set(u.importFileIndex, t);
+    }
+  }
   units.forEach((u, i) => {
     if (!u.rawText?.trim()) return;
-    if (u.role === 'main_source') pesukim.push(u);
-    else if (isOnkelos(u)) onkelosUnits.push(u);
+    const pos = positions.get(u.id);
+    if (u.role === 'main_source') {
+      const ch = pos?.chapter ?? 0;
+      const n = pos && pos.explicit && pos.pasuk > 0 ? pos.pasuk : (chapterCounter.get(ch) ?? 0) + 1;
+      chapterCounter.set(ch, n);
+      pasukNumber.push(n);
+      pesukim.push(stripNumber(u));
+    } else if (isOnkelos(u)) onkelosUnits.push(stripNumber(u));
     else if (u.role === 'chapter' || u.role === 'heading' || u.role === 'main_title' || u.role === 'subtitle') {
-      headingBefore.set(pesukim.length, u.rawText.trim());
-    } else if (COMMENT_ROLES.has(u.role) || u.role === 'regular_paragraph') commentaries.push({ unit: u, order: i });
+      if (u.importFileIndex === undefined || u.importFileIndex === mainFile) {
+        headingBefore.set(pesukim.length, u.rawText.trim());
+      }
+    } else if (COMMENT_ROLES.has(u.role) || u.role === 'regular_paragraph') {
+      if (u.importFileIndex !== undefined && (pos?.chapter ?? 0) === 0) intro.push(u);
+      else commentaries.push({ unit: u, order: i });
+    }
   });
+  chapterCounter = new Map();
   const pasukIdx = new Map(pesukim.map((p, i) => [p.id, i]));
   const linkSource = new Map<string, string>();
   for (const l of input.links ?? []) linkSource.set(l.commentaryUnitId, l.sourceUnitId);
@@ -165,16 +201,50 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       else docOrderPasuk.set(u.id, last);
     }
   }
+  // T12 — separate files (pesukim, then Onkelos, then Rashi) give no
+  // document-order anchor: a comment without a link would land after the
+  // LAST pasuk of the book. Link those by chapter + pasuk words.
+  const unlinked = commentaries.filter(({ unit }) => {
+    const src = linkSource.get(unit.id) ?? unit.linkedSourceId;
+    return !(src && pasukIdx.has(src));
+  });
+  if (unlinked.length > 0) {
+    for (const l of linkChumashCommentaries(units).links) {
+      if (!linkSource.has(l.commentaryUnitId)) linkSource.set(l.commentaryUnitId, l.sourceUnitId);
+    }
+  }
   const anchorOf = (u: ContentUnit): number => {
     const src = linkSource.get(u.id) ?? u.linkedSourceId;
     if (src && pasukIdx.has(src)) return pasukIdx.get(src)!;
     return docOrderPasuk.get(u.id) ?? 0;
   };
 
-  // Onkelos: one unit per pasuk → by index; otherwise by document order.
+  // Onkelos: one unit per pasuk → by index; else pasuk i of chapter c ↔
+  // Onkelos paragraph i of chapter c (each file has its own "פרק" headings);
+  // else document order.
   const onkByPasuk = new Map<number, ContentUnit[]>();
+  const chapOf = chapterNumbers(units);
+  const pesukimByChapter = new Map<number, number[]>();
+  pesukim.forEach((p, i) => {
+    const c = chapOf.get(p.id) ?? 0;
+    pesukimByChapter.set(c, [...(pesukimByChapter.get(c) ?? []), i]);
+  });
+  const onkSeenInChapter = new Map<number, number>();
+  const pasukByPos = new Map<string, number>();
+  pesukim.forEach((p, i) => pasukByPos.set(`${chapOf.get(p.id) ?? 0}:${pasukNumber[i]}`, i));
   onkelosUnits.forEach((u, i) => {
-    const k = onkelosUnits.length === pesukim.length ? i : anchorOf(u);
+    let k: number;
+    const op = positions.get(u.id);
+    const exact = op && op.explicit && op.pasuk > 0 ? pasukByPos.get(`${op.chapter}:${op.pasuk}`) : undefined;
+    if (exact !== undefined) k = exact;
+    else if (onkelosUnits.length === pesukim.length) k = i;
+    else {
+      const c = chapOf.get(u.id) ?? 0;
+      const n = onkSeenInChapter.get(c) ?? 0;
+      onkSeenInChapter.set(c, n + 1);
+      const list = pesukimByChapter.get(c);
+      k = list?.length ? list[Math.min(n, list.length - 1)] : anchorOf(u);
+    }
     onkByPasuk.set(k, [...(onkByPasuk.get(k) ?? []), u]);
   });
 
@@ -182,13 +252,15 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   const bandByKey = new Map<string, Band>();
   for (const { unit, order } of commentaries) {
     const author = detectCommentator(unit);
-    const key = author?.name ?? `role:${unit.role === 'dibbur_hamatchil' ? 'primary_comment' : unit.role}`;
+    const fileKey = unit.importFileIndex !== undefined ? `file:${unit.importFileIndex}` : undefined;
+    const key = fileKey ?? author?.name ?? `role:${unit.role === 'dibbur_hamatchil' ? 'primary_comment' : unit.role}`;
     let band = bandByKey.get(key);
     if (!band) {
-      const isRashi = author?.name === 'Rashi' || (!author && (unit.role === 'primary_comment' || unit.role === 'dibbur_hamatchil'));
+      const ft = unit.importFileIndex !== undefined ? fileTitle.get(unit.importFileIndex) : undefined;
+      const isRashi = ft ? /רש/.test(ft) : author?.name === 'Rashi' || (!author && (unit.role === 'primary_comment' || unit.role === 'dibbur_hamatchil'));
       band = {
         key,
-        title: author?.nameHe ?? ROLE_TITLES[unit.role] ?? 'מפרשים',
+        title: ft ?? author?.nameHe ?? ROLE_TITLES[unit.role] ?? 'מפרשים',
         order: isRashi ? 0 : (ROLE_ORDER[unit.role] ?? 2) + 1,
         firstSeen: order,
         fontFamily: isRashi ? rashiFont : otherFont,
@@ -254,7 +326,7 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
   const titleSize = (b: Band) => b.sizePt + 1.5;
 
   // Pasuk numbers (Hebrew letters) run in before each pasuk.
-  const pasukLabel = (i: number): string => hebrewNumeralBare(i + 1);
+  const pasukLabel = (i: number): string => hebrewNumeralBare(pasukNumber[i] ?? i + 1);
 
   interface Measured {
     pasukLines: TypesetLine[];
@@ -279,7 +351,7 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
     const pasukPitch = Math.max(lh(pasukSize), requiredPitch(pasukLines));
     const onkPitch = Math.max(lh(onkSize), requiredPitch(onkLines));
     const bandPitch = new Map<string, number>();
-    const topH = Math.max(pasukLines.length * pasukPitch, hasOnkelos ? (onkLines.length + 1) * onkPitch : 0);
+    const topH = to > from ? Math.max(pasukLines.length * pasukPitch, hasOnkelos ? (onkLines.length + 1) * onkPitch : 0) : 0;
     let height = topH;
     const bandLines = new Map<string, TypesetLine[]>();
     for (const b of bands) {
@@ -296,21 +368,109 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
     return { pasukLines, onkLines, bandLines, height, pasukPitch, onkPitch, bandPitch };
   };
 
+  // ── cheap height estimate (natural widths × learned pitch) ─────────
+  const natCache = new Map<string, number>();
+  const natWidth = (u: ContentUnit, size: number, family: string, prefix?: string): number => {
+    const k = `${u.id}|${size}|${family}|${prefix ?? ''}`;
+    let w = natCache.get(k);
+    if (w === undefined) {
+      const ws = shape(u, size, family, prefix);
+      w = ws.reduce((a, x) => a + x.width, 0) + Math.max(0, ws.length - 1) * size * 0.3;
+      natCache.set(k, w);
+    }
+    return w;
+  };
+  // pitch / line-count ratios learned from the last exact measurement
+  let pitchP = lh(pasukSize) * 1.15;
+  let pitchO = lh(onkSize) * 1.1;
+  let pitchB = 1.1;
+  const learnFrom = (m: Measured | null) => {
+    if (!m) return;
+    pitchP = m.pasukPitch;
+    pitchO = m.onkPitch;
+    const ratios = [...m.bandPitch.entries()].map(([k, v]) => v / lh(bands.find(b => b.key === k)!.sizePt));
+    if (ratios.length) pitchB = Math.max(...ratios);
+  };
+  const estimateHeight = (from: number, to: number): number => {
+    let pW = 0;
+    for (let k = from; k < to; k++) pW += natWidth(pesukim[k], pasukSize, pasukFont, pasukLabel(k));
+    let h = Math.ceil(pW / (pasukW * 0.98)) * pitchP;
+    if (hasOnkelos) {
+      let oW = 0;
+      for (let k = from; k < to; k++) for (const u of onkByPasuk.get(k) ?? []) oW += natWidth(u, onkSize, onkFont);
+      h = Math.max(h, (Math.ceil(oW / (onkW * 0.98)) + 1) * pitchO);
+    }
+    for (const b of bands) {
+      let bW = 0;
+      for (let k = from; k < to; k++) for (const u of b.byPasuk.get(k) ?? []) bW += natWidth(u, b.sizePt, b.fontFamily);
+      const carried = carry.get(b.key)?.length ?? 0;
+      if (!bW && !carried) continue;
+      const lines = Math.ceil(bW / (colW * 0.98)) + carried;
+      h += MG_FIT.bandGapPt + lh(titleSize(b)) + Math.ceil(lines / 2) * lh(b.sizePt) * pitchB;
+    }
+    return h;
+  };
+
   // ── paginate ──────────────────────────────────────────────────────
   const pages: PageTypesetResult[] = [];
+  // Introductions (a commentary's הקדמה before its first "פרק") open the
+  // book: pages of their own, in their commentary's band, before the
+  // pesukim. A bare author line or label (< 30 words) is not a page.
+  let prefaceActive = false;
+  {
+    const introByBand = new Map<string, ContentUnit[]>();
+    for (const u of intro) {
+      const key = `file:${u.importFileIndex}`;
+      if (bandByKey.has(key)) introByBand.set(key, [...(introByBand.get(key) ?? []), u]);
+    }
+    for (const b of bands) {
+      const us = introByBand.get(b.key);
+      if (!us) continue;
+      const words = us.reduce((n, u) => n + u.rawText.split(/\s+/).filter(Boolean).length, 0);
+      if (words < 30) continue;
+      carry.set(b.key, setLines(us.flatMap(u => shape(u, b.sizePt, b.fontFamily)), colW, b.sizePt, b.fontFamily, us[0].role, us[0].id));
+      prefaceActive = true;
+    }
+  }
+
   let cursor = 0;
   let p = 0;
   while ((cursor < pesukim.length || [...carry.values()].some(l => l.length)) && p < 2000) {
+    const introPage = prefaceActive;
     // Largest run of pesukim whose commentaries all fit.
+    // The height only grows with more pesukim. Estimate the page from
+    // natural word widths (cheap — words are shaped once), then measure
+    // EXACTLY only around the estimate, stepping to the boundary: the same
+    // answer as trying every count, in ~2–3 full measurements per page
+    // instead of ~12 (a whole Bereishit took seconds).
     let best: Measured | null = null;
     let bestTo = cursor;
-    for (let to = cursor + 1; to <= pesukim.length; to++) {
-      const m = measure(cursor, to, true);
-      if (m.height <= contentH || to === cursor + 1) {
+    if (introPage) {
+      best = measure(cursor, cursor, true); // introduction pages: bands only
+    } else if (cursor < pesukim.length) {
+      let est = cursor + 1;
+      while (est < pesukim.length && estimateHeight(cursor, est + 1) <= contentH) est++;
+      let m = measure(cursor, est, true);
+      if (m.height <= contentH) {
         best = m;
+        bestTo = est;
+        while (bestTo < pesukim.length) {
+          const next = measure(cursor, bestTo + 1, true);
+          if (next.height > contentH) break;
+          best = next;
+          bestTo++;
+        }
+      } else {
+        let to = est;
+        while (to > cursor + 1) {
+          to--;
+          m = measure(cursor, to, true);
+          if (m.height <= contentH) break;
+        }
+        best = m; // a page always takes at least one pasuk
         bestTo = to;
-        if (m.height > contentH) break;
-      } else break;
+      }
+      learnFrom(best);
     }
     if (!best) best = measure(cursor, cursor, true); // carry-only page (end of book)
 
@@ -397,11 +557,13 @@ export function paginateMikraotGedolot(input: MikraotInput): BookTypesetDocument
       marginLines: extra,
       knee: emptyKnee(contentW, contentH),
       designSettings,
-      chumashFirstPasuk: cursor < pesukim.length ? cursor : undefined,
+      chumashFirstPasuk: !introPage && cursor < pesukim.length ? cursor : undefined,
       chumashHeadings: headingTexts,
+      chumashIntro: introPage || undefined,
     } as PageTypesetResult);
     cursor = bestTo;
     p++;
+    if (prefaceActive && ![...carry.values()].some(l => l.length)) prefaceActive = false;
   }
   return {
     title: input.title,

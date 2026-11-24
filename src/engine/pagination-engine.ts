@@ -800,7 +800,9 @@ export class PaginationEngine {
           // page number on the outer corner.
           pg.vilnaHeader = layoutHeaderParts(
             pg,
-            chumashHeaderParts(units, pg.chumashFirstPasuk, title),
+            pg.chumashIntro
+              ? chumashHeaderParts(units, 0, title).slice(0, 1)
+              : chumashHeaderParts(units, pg.chumashFirstPasuk, title),
             folioInfo.folioDisplay,
             spreadSide,
             vilnaHeaderFont,

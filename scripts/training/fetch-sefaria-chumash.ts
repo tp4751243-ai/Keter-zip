@@ -15,15 +15,16 @@ import * as path from 'node:path';
 const API = 'https://www.sefaria.org';
 
 async function getJson(url: string): Promise<any> {
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     try {
+      await new Promise(r => setTimeout(r, 250));
       const res = await fetch(url);
       if (res.ok) return await res.json();
       if (res.status === 404) return null;
     } catch {
       /* retry */
     }
-    await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+    await new Promise(r => setTimeout(r, 1500 * 2 ** Math.min(attempt, 5)));
   }
   throw new Error(`fetch failed: ${url}`);
 }

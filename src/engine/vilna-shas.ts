@@ -430,6 +430,15 @@ export function verifyDibburHamatchil(units: ContentUnit[], links: RavTextLink[]
  * delimiter detection — and it is what lets an unformatted .docx (plain
  * paragraphs, no bold, no colons) still link its commentaries.
  */
+const normalizedCache = new WeakMap<ContentUnit, { raw: string; norm: string }>();
+function normalizedSourceText(u: ContentUnit): string {
+  const hit = normalizedCache.get(u);
+  if (hit && hit.raw === u.rawText) return hit.norm;
+  const norm = normalizeHebrewForMatch(u.rawText);
+  normalizedCache.set(u, { raw: u.rawText, norm });
+  return norm;
+}
+
 export function detectDibburFromSource(
   commentaryText: string,
   sourceUnits: ContentUnit[]
@@ -444,17 +453,31 @@ export function detectDibburFromSource(
     .trim();
   const words = stripped.split(/\s+/).filter(Boolean);
   if (words.length < 2) return null;
+  // Each source is normalized ONCE (cached per unit): this runs for every
+  // commentary paragraph, and normalizing the whole source each time made
+  // a full Rashi on Bereishit take ~17 s to import (2,066 × 1,583).
   const normalizedSources = sourceUnits.map(u => ({
     id: u.id,
-    text: normalizeHebrewForMatch(u.rawText),
+    text: normalizedSourceText(u),
   }));
+  // Every longer candidate contains the shortest one, so only sources
+  // holding the shortest searchable prefix can match a longer one: one
+  // full scan instead of seven (same result, same order).
+  let pool = normalizedSources;
+  for (let len = 2; len <= Math.min(8, words.length); len += 1) {
+    const norm = normalizeHebrewForMatch(words.slice(0, len).join(' '));
+    if (norm.length < 4) continue;
+    pool = normalizedSources.filter(s => s.text.includes(norm));
+    if (pool.length === 0) return null;
+    break;
+  }
   // Longest first: an 8-word lemma beats a 2-word one (a 2-word match is
   // often a coincidence — "אמר רבי" occurs everywhere).
   for (let len = Math.min(8, words.length); len >= 2; len -= 1) {
     const candidate = words.slice(0, len).join(' ');
     const norm = normalizeHebrewForMatch(candidate);
     if (norm.length < 4) continue;
-    const hit = normalizedSources.find(s => s.text.includes(norm));
+    const hit = pool.find(s => s.text.includes(norm));
     if (hit) return { dibbur: candidate, sourceUnitId: hit.id };
   }
   return null;

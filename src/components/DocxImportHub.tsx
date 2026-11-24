@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DocxImporter, flagUncertainMatches, describeConfidence, type DocxImportResult } from '../engine/docx-importer';
 import { classifyForImport, type AutoLayoutImportInfo } from '../engine/auto-layout';
+import { linkChumashCommentaries, looksLikeChumash } from '../engine/chumash-linker';
 import { analyzeImportedDocx, formatPreviewCounts, type DocxPreviewStats } from '../engine/docx-semantics';
 // v0.9.8 Phase 3 — CommentaryLinkerEngine: the new fuzzy dibbur linker
 // runs over the old linker's output and the merge keeps the
@@ -291,6 +292,11 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
     Record<string, 'accepted' | 'reassigned' | 'dropped'>
   >({});
   const [reviewReassign, setReviewReassign] = useState<Record<string, string>>({});
+  // T12 — the review list is drawn 50 rows at a time, and each "reassign"
+  // menu lists only the sources around the suggested one (a whole book
+  // made it 1,800 rows × 1,700 options and froze the window).
+  const [reviewVisible, setReviewVisible] = useState(50);
+  const reviewSourceIndex = React.useMemo(() => new Map(reviewSources.map((s, i) => [s.id, i])), [reviewSources]);
 
   // v0.8.0 Part E — import warnings review (e.g. images dropped from the
   // DOCX). Warnings are NEVER swallowed: the import is held here until
@@ -320,6 +326,7 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
       const confident = discoveredLinks.filter(l => !uncertain.includes(l));
       setPendingImport({ units: allUnits, title: primaryTitle, confidentLinks: confident, autoLayout });
       setReviewLinks(uncertain);
+      setReviewVisible(50);
       setReviewSources(
         allUnits.filter(u => u.role === 'main_source' || u.role === 'chapter')
       );
@@ -467,6 +474,7 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
         for (const u of res.units) {
           totalOrder++;
           u.order = totalOrder;
+          u.importFileIndex = i;
           if (item.role !== 'main_source' && DOCX_HUB_RETAGGABLE_ROLES.includes(u.role)) {
             u.role = item.role;
             if (!u.textRuns || !u.textRuns.some(r => r.isBold || r.isDibbur)) {
@@ -481,7 +489,18 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
       // v0.9.7 — tertiary_comment joins the linking: a third mefaresh
       // gets dibbur-hamatchil links to the source like Rashi/Tosafot.
       let discoveredLinks: RavTextLink[] = [];
-      if (autoDiscoverLinks && filesList.length > 1) {
+      // Layout training T12 — a Chumash links every mefaresh to its pasuk
+      // by chapter + monotone alignment (99% on a whole Bereishit, in half
+      // a second). The Gemara linkers placed 6% correctly there and took
+      // 9 s, then sent ~1,800 links to review.
+      const chumashBook = archetypeId === 'chumash' || looksLikeChumash(allUnits, primaryTitle);
+      if (autoDiscoverLinks && filesList.length > 1 && chumashBook) {
+        setImportStatus(t("מזהה קישורים אוטומטיים בין המפרשים לגמרא לפי דיבור המתחיל..."));
+        // let the status paint before the work starts
+        await new Promise(r => setTimeout(r, 0));
+        discoveredLinks = linkChumashCommentaries(allUnits).links;
+        setLinkingReport(null);
+      } else if (autoDiscoverLinks && filesList.length > 1) {
         setImportStatus(t("מזהה קישורים אוטומטיים בין המפרשים לגמרא לפי דיבור המתחיל..."));
         const sources = allUnits.filter(u => u.role === 'main_source' || u.role === 'chapter');
         const commentaries = allUnits.filter(
@@ -915,7 +934,21 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
           <p className={`${tone.muted} text-[11px]`}>
             {t("קישורים אלו לא יוחלו אוטומטית. יש לאשר, להקצות למקור אחר, או לוותר על כל אחד מהם — קישור שלא הוכרע לא ייובא.")}
           </p>
-          {reviewLinks.map(link => {
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() =>
+                setReviewActions(prev => {
+                  const next = { ...prev };
+                  for (const l of reviewLinks) if (!next[l.linkId]) next[l.linkId] = 'accepted';
+                  return next;
+                })
+              }
+              className={`px-3 py-1.5 rounded-md text-[11px] font-semibold ${tone.ghostBtn} border`}
+            >
+              {t("אישור כל ההצעות שלא הוכרעו")} ({reviewLinks.filter(l => !reviewActions[l.linkId]).length})
+            </button>
+          </div>
+          {reviewLinks.slice(0, reviewVisible).map(link => {
             const conf = link.matchConfidence ?? describeConfidence(link.confidenceScore);
             const action = reviewActions[link.linkId];
             const reassignedId = reviewReassign[link.linkId] ?? '';
@@ -964,7 +997,13 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
                     title={t("הקצאה למקור אחר")}
                   >
                     <option value="">{t("הקצה למקור אחר…")}</option>
-                    {reviewSources.map(s => (
+                    {(() => {
+                      const at = reviewSourceIndex.get(link.sourceUnitId) ?? 0;
+                      const from = Math.max(0, at - 12);
+                      const near = reviewSources.slice(from, from + 25);
+                      const chosen = reassignedId ? reviewSources.find(x => x.id === reassignedId) : undefined;
+                      return chosen && !near.includes(chosen) ? [chosen, ...near] : near;
+                    })().map(s => (
                       <option key={s.id} value={s.id}>
                         {(s.rawText || '').substring(0, 45)}
                         {(s.rawText || '').length > 45 ? '…' : ''}
@@ -996,6 +1035,14 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
               </div>
             );
           })}
+          {reviewLinks.length > reviewVisible && (
+            <button
+              onClick={() => setReviewVisible(v => v + 50)}
+              className={`px-3 py-1.5 rounded-md text-[11px] ${tone.ghostBtn} border`}
+            >
+              {t("הצגת 50 נוספים")} ({reviewLinks.length - reviewVisible})
+            </button>
+          )}
         </div>
       )}
 

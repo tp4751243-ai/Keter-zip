@@ -1641,6 +1641,21 @@ export class DocxImporter {
       .map((u, idx) => ({ unit: u, idx, normText: normalizeHebrew(u.rawText), normWords: normalizeHebrew(u.rawText).split(' ').map(normalizeWord).filter(Boolean) }))
       .filter(s => s.unit.role !== 'chapter' && s.unit.role !== 'main_title' && s.unit.role !== 'heading');
 
+    // word → positions in validSources (keys: the word and the word
+    // without its first letter, matching hasExactTokenSubseq's prefix
+    // tolerance).
+    const sourceWordIndex = new Map<string, number[]>();
+    validSources.forEach((s, i) => {
+      for (const w of s.normWords) {
+        for (const k of [w, w.slice(1)]) {
+          if (!k) continue;
+          const arr = sourceWordIndex.get(k);
+          if (!arr) sourceWordIndex.set(k, [i]);
+          else if (arr[arr.length - 1] !== i) arr.push(i);
+        }
+      }
+    });
+
     for (const com of commentaryUnits) {
       let dibbur = com.dibburHamatchil;
       if (!dibbur) {
@@ -1716,7 +1731,16 @@ export class DocxImporter {
           return false;
         };
 
-        const candidates = validSources.filter(s => hasExactTokenSubseq(s.normWords, dibburWords));
+        // Only sources containing the dibbur's first word (or it with one
+        // prefix letter dropped) can match: look them up in the word
+        // index instead of scanning every source (a whole Chumash with
+        // Rashi is 2,000 × 1,500). Same test, same order, same result.
+        const d0 = dibburWords[0];
+        const candIdx = new Set<number>([...(sourceWordIndex.get(d0) ?? []), ...(sourceWordIndex.get(d0.slice(1)) ?? [])]);
+        const candidates = [...candIdx]
+          .sort((a, b) => a - b)
+          .map(i => validSources[i])
+          .filter(s => hasExactTokenSubseq(s.normWords, dibburWords));
         const maxJump = dibburWords.length <= 2 ? 6 : 15;
         const nearbyForwardCand = candidates.find(
           c => c.idx >= Math.max(0, lastSrcIdx - 1) && c.idx <= lastSrcIdx + maxJump

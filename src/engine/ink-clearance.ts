@@ -17,6 +17,7 @@
 import type { TypesetLine } from '../types/typesetter';
 
 let ctx: CanvasRenderingContext2D | null = null;
+let currentFont = '';
 const cache = new Map<string, { ascent: number; descent: number }>();
 
 function context(): CanvasRenderingContext2D | null {
@@ -31,36 +32,83 @@ function context(): CanvasRenderingContext2D | null {
 }
 
 /** Ink above / below the baseline of one word, in pt. */
+/**
+ * Ink above / below the baseline of one word, in pt. Measured per
+ * grapheme cluster (a letter with its nikkud and teamim), cached per font:
+ * a whole book has tens of thousands of distinct words but only a few
+ * thousand distinct clusters, and a cluster inks the same in every word.
+ */
 export function measureInk(text: string, fontFamily: string, sizePt: number, weight = 400): { ascent: number; descent: number } {
+  let ascent = 0;
+  let descent = 0;
+  for (const cl of clusters(text)) {
+    const ink = measureCluster(cl, fontFamily, sizePt, weight);
+    if (ink.ascent > ascent) ascent = ink.ascent;
+    if (ink.descent > descent) descent = ink.descent;
+  }
+  return { ascent, descent };
+}
+
+const MARK = /[\u0591-\u05C7\u05BF]/;
+function clusters(text: string): string[] {
+  const out: string[] = [];
+  for (const ch of text) {
+    if (out.length && MARK.test(ch)) out[out.length - 1] += ch;
+    else out.push(ch);
+  }
+  return out;
+}
+
+function measureCluster(text: string, fontFamily: string, sizePt: number, weight: number): { ascent: number; descent: number } {
   const key = `${fontFamily}|${sizePt}|${weight}|${text}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const c = context();
   let r = { ascent: sizePt * 0.8, descent: sizePt * 0.25 };
   if (c) {
-    c.font = `${weight} ${sizePt}px "${fontFamily}"`;
+    // Setting ctx.font parses the string: only when it changes.
+    const font = `${weight} ${sizePt}px "${fontFamily}"`;
+    if (font !== currentFont) {
+      c.font = font;
+      currentFont = font;
+    }
     const m = c.measureText(text);
     if (Number.isFinite(m.actualBoundingBoxAscent) && Number.isFinite(m.actualBoundingBoxDescent)) {
       r = { ascent: Math.max(0, m.actualBoundingBoxAscent), descent: Math.max(0, m.actualBoundingBoxDescent) };
     }
   }
-  if (cache.size > 20000) cache.clear();
+  if (cache.size > 50000) cache.clear();
   cache.set(key, r);
   return r;
 }
 
 /** Highest ink above and lowest ink below the baseline of a line. */
+const lineCache = new WeakMap<TypesetLine['words'], { ascent: number; descent: number }>();
 export function lineInk(line: TypesetLine, defaultFamily = 'Frank Ruhl Libre', defaultSize = 12): { ascent: number; descent: number } {
+  const hit = lineCache.get(line.words);
+  if (hit) return hit;
+  const r = lineInkUncached(line, defaultFamily, defaultSize);
+  lineCache.set(line.words, r);
+  return r;
+}
+
+const wordCache = new WeakMap<object, { ascent: number; descent: number }>();
+function lineInkUncached(line: TypesetLine, defaultFamily: string, defaultSize: number): { ascent: number; descent: number } {
   let ascent = 0;
   let descent = 0;
   for (const w of line.words) {
     if (w.isSpace || !w.text.trim()) continue;
-    const ink = measureInk(
-      w.text,
-      w.fontFamily || line.fontFamily || defaultFamily,
-      w.fontSizePt ?? line.fontSizePt ?? defaultSize,
-      w.fontWeight ?? (w.isBold ? 700 : line.fontWeight ?? 400)
-    );
+    // Word objects are reused across layout attempts: cache on the object.
+    let ink = wordCache.get(w);
+    if (!ink) {
+      ink = measureInk(
+        w.text,
+        w.fontFamily || line.fontFamily || defaultFamily,
+        w.fontSizePt ?? line.fontSizePt ?? defaultSize,
+        w.fontWeight ?? (w.isBold ? 700 : line.fontWeight ?? 400)
+      );
+      wordCache.set(w, ink);
+    }
     ascent = Math.max(ascent, ink.ascent);
     descent = Math.max(descent, ink.descent);
   }

@@ -47,6 +47,8 @@ jobs:
         run: npx tsx scripts/training/chumash-harness.ts deuteronomy --no-render --min-score 100
       - name: Brace-tagged prose sefer (Mesilat Yesharim, two columns)
         run: npx tsx scripts/training/prose-harness.ts --no-render --min-score 100
+      - name: Whole-book import (Bereishit + Onkelos + Rashi) — no freeze, links correct
+        run: TRUTH=training/chumash/genesis/corpus.json MIN_ACCURACY=0.95 npx tsx scripts/training/import-perf.ts training/chumash/genesis/docx --budget-ms 60000
 
   build-windows:
     needs: layout-rules

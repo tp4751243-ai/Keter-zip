@@ -25,6 +25,8 @@ export const EN_STRINGS: Record<string, string> = {
 "איפוס חוקי עימוד לברירת מחדל מקצועית": "Reset typesetting rules to professional defaults",
 "איפוס לברירות מחדל מקצועיות": "Reset to professional defaults",
 "אישור": "Approve",
+"אישור כל ההצעות שלא הוכרעו": "Accept all undecided suggestions",
+"הצגת 50 נוספים": "Show 50 more",
 "אישור אופטימיזציית עימוד מלאה": "Approve full typesetting optimization",
 "אישור וסגירה": "Approve and close",
 "אל תוסיף עיטורים אוטומטית": "Do not add ornaments automatically",

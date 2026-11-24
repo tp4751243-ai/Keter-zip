@@ -621,6 +621,12 @@ export interface ContentUnit {
    */
   anchoredCommentaryIds?: string[];
   chapterTitle?: string;
+  /**
+   * Layout training T12 — which uploaded file the unit came from (0-based,
+   * in upload order). A multi-file import concatenates the files; this
+   * lets structure (chapter / pasuk numbering) restart per file.
+   */
+  importFileIndex?: number;
   simanNumber?: string;
   seifLetter?: string;
   /** v0.9.8 Phase 2 — unit contains at least one Rema gloss span. */
@@ -853,6 +859,8 @@ export interface PageTypesetResult {
   chumashHeadings?: string[];
   /** Layout training T8 — prose pages: the perek in effect on the page (for the book · perek head). */
   runningChapter?: string;
+  /** Layout training T12 — a Mikraot Gedolot introduction page (commentary הקדמה, no pesukim). */
+  chumashIntro?: boolean;
   /**
    * Layout training T2.2 — set on the page where the knee solver reserved
    * the opening frame's space at the top of the Gemara column; the frame
