@@ -122,6 +122,8 @@ export interface DocumentClassification {
     vocalizedSourceUnits?: number;
     /** Layout training T6 — Gemara evidence: מתני׳ / גמ׳ / תנו רבנן / אמר רב … in the source. */
     talmudUnits?: number;
+    /** Layout training T13 — "דף ב." / "דף ב:" headings (a Talmud folio file). */
+    dafHeadings?: number;
   };
   // --- v0.9.3 Part B: genre signals + role patterns (research note) ---
   /** Genre signals matched in the title / first pages / file name / styles (strong or weak). */
@@ -419,6 +421,7 @@ export function classifyDocument(
   let sofPasukUnits = 0;
   let vocalizedSourceUnits = 0;
   let talmudUnits = 0;
+  let dafHeadings = 0;
 
   for (const u of units) {
     const text = u.rawText || '';
@@ -434,9 +437,15 @@ export function classifyDocument(
       const letters = (text.match(/[\u05D0-\u05EA]/g) ?? []).length;
       const vowels = (text.match(/[\u05B0-\u05BC\u05C1\u05C2\u05C7]/g) ?? []).length;
       if (letters >= 8 && vowels / letters > 0.5) vocalizedSourceUnits += 1;
-      if (/\u05C3/.test(text) || (vowels / Math.max(1, letters) > 0.5 && /[\u05B0-\u05BC]\s*:/.test(text))) sofPasukUnits += 1;
-      if (TALMUD_SOURCE_MARKERS.some(re => re.test(text))) talmudUnits += 1;
+      const talmudic = TALMUD_SOURCE_MARKERS.some(re => re.test(text));
+      // A sof pasuk is ׃ — or a ':' ENDING a pointed unit that is not
+      // Gemara (pointed Gemara has "אָמַר לָהֶם:" in every line; counting
+      // those made a vocalized Shas look like a Chumash).
+      if (/\u05C3/.test(text) || (!talmudic && vowels / Math.max(1, letters) > 0.5 && /[\u05B0-\u05BC][^\s:]*\s*:\s*$/.test(text))) sofPasukUnits += 1;
+      if (talmudic) talmudUnits += 1;
     }
+    // Layout training T13 — "דף ב." / "דף ב:" / "דף ב ע״א" headings mark a Talmud folio file.
+    if ((u.role === 'heading' || u.role === 'chapter' || u.role === 'subtitle') && /^\s*דף\s+[א-ת"״׳']{1,4}\s*(?:[.:]|ע["״]?[אב])?\s*$/.test(text.replace(/[\u0591-\u05C7]/g, ''))) dafHeadings += 1;
     const tier = classifyUnitTier(u);
     if (tier) {
       tierCounts[tier.tier] += 1;
@@ -553,7 +562,7 @@ export function classifyDocument(
     commentaryAuthors: authors,
     titlePage: titlePage.isTitlePage ? titlePage : undefined,
     distinctCommentaryAuthors: authors.length,
-    markers: { responsa: responsaHits, chassidic: chassidicHits, shulchanAruch: shulchanAruchHits, mishnahBerurah: mishnahBerurahHits, taamimUnits, torahBook, sofPasukUnits, vocalizedSourceUnits, talmudUnits },
+    markers: { responsa: responsaHits, chassidic: chassidicHits, shulchanAruch: shulchanAruchHits, mishnahBerurah: mishnahBerurahHits, taamimUnits, torahBook, sofPasukUnits, vocalizedSourceUnits, talmudUnits, dafHeadings },
     signals,
     rolePatterns,
   };
@@ -1057,7 +1066,21 @@ export function constrainDecisionToSeferType(
   bookType: SeferType | undefined
 ): AutoLayoutDecision {
   if (!bookType || bookType === 'talmud') return decision;
-  if (seferTypeForRecipe(decision.recipeId, decision.layoutType) === bookType) return decision;
+  const decidedType = seferTypeForRecipe(decision.recipeId, decision.layoutType);
+  if (decidedType === bookType) return decision;
+  // Layout training T13 — the FILES win when they are unmistakable: a whole
+  // Shas tractate with daf headings imported while the home screen still
+  // had the Chumash card selected was laid out as a Mikraot Gedolot.
+  const m = classification.markers;
+  const clearlyTalmud = (m.dafHeadings ?? 0) >= 2 || ((m.talmudUnits ?? 0) >= 3 && classification.tierCounts.tosafot_outer > 0);
+  const clearlyChumash = (m.torahBook ?? 0) > 0 && (m.sofPasukUnits ?? 0) >= 10 && (m.dafHeadings ?? 0) === 0;
+  if ((decidedType === 'talmud' && clearlyTalmud) || (decidedType === 'chumash' && clearlyChumash)) {
+    return {
+      ...decision,
+      lineHe: `${decision.lineHe} — הקבצים הם בבירור ${decidedType === 'talmud' ? 'גמרא' : 'חומש'}, ולכן לא נשמר הסוג שנבחר בכרטיס.`,
+      lineEn: `${decision.lineEn} — the files are clearly ${decidedType === 'talmud' ? 'Gemara' : 'Chumash'}, so the selected card's type was not kept.`,
+    };
+  }
   const inType = scoreRecipes(classification).find(sr => seferTypeForRecipe(sr.recipe.id, sr.recipe.layoutType) === bookType);
   const recipeId = inType?.recipe.id ?? DEFAULT_RECIPE_FOR_TYPE[bookType];
   const recipe = getRecipeByIdLocal(recipeId);

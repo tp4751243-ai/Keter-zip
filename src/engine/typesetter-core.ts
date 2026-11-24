@@ -327,6 +327,121 @@ export class TypesetterEngine {
    * Composes pre-shaped words (preserving isDibbur, isBold, unitId, linkedSourceId, isParagraphEnd)
    * into justified TypesetLines.
    */
+  /**
+   * Layout training T13 — the NUMBER of first-fit lines words[from..to)
+   * make at `targetWidth`: exactly the break rule of typesetShapedWords
+   * (greedy path: heading isolation, per-line indents, per-word space),
+   * without building lines, justifying or styling them. The Gemara knee
+   * planner asks this tens of thousands of times per page; going through
+   * the full typesetter for a count made each page take seconds.
+   */
+  public countGreedyLines(
+    words: ShapedWord[],
+    from: number,
+    to: number,
+    targetWidth: number,
+    defaultRole: ContentRole = 'main_source',
+    defaultUnitId: string = 'unit-1'
+  ): number {
+    if (to <= from || targetWidth <= 10) return 0;
+    // Memos live on the engine (one engine serves one layout pass, its
+    // settings do not change during it): the planner calls this ~20,000
+    // times per page.
+    const ck = `${defaultRole}|${defaultUnitId}`;
+    let isolate = this.countIsolateMemo.get(ck);
+    if (isolate === undefined) {
+      isolate = Boolean(
+        TypesettingRulesEngine.resolveRule<boolean>('headings.isolateFromBodyLine', { role: defaultRole, unitId: defaultUnitId }, this.rulesConfig).value
+      );
+      this.countIsolateMemo.set(ck, isolate);
+    }
+    if (this.countBaseSpace === undefined) this.countBaseSpace = this.shaper.shapeWord(' ').width;
+    const baseSpace = this.countBaseSpace;
+    const styleMemo = this.countStyleMemo;
+    const indentMemo = this.countIndentMemo;
+    const styleOf = (role: ContentRole, unitId: string) => {
+      const k = `${role}|${unitId}`;
+      let r = styleMemo.get(k);
+      if (!r) {
+        r = DesignSettingsEngine.resolveStyle(this.designSettings!, { role, unitId });
+        styleMemo.set(k, r);
+      }
+      return r;
+    };
+    const availFor = (role: ContentRole, unitId: string, lineIndexInUnit: number): number => {
+      if (!this.designSettings) return targetWidth;
+      const k = `${role}|${unitId}|${Math.min(lineIndexInUnit, 12)}|${targetWidth}`;
+      let w = indentMemo.get(k);
+      if (w === undefined) {
+        const ind = computeParagraphLineIndents(styleOf(role, unitId).paragraph, lineIndexInUnit);
+        w = Math.max(40, targetWidth - ind.firstLineIndentPt - ind.hangingIndentPt - ind.rightIndentPt - ind.leftIndentPt);
+        indentMemo.set(k, w);
+      }
+      return w;
+    };
+    const isHead = (r?: ContentRole) => r === 'chapter' || r === 'heading' || r === 'main_title' || r === 'siman';
+    let count = 0;
+    let tailUnit: string | undefined;
+    let tailCount = 0;
+    let curRole: ContentRole | undefined;
+    let curUnit: string | undefined;
+    let curLineIdx = -1;
+    let curAvail = targetWidth;
+    let curWs = 1.0;
+    let curFs = this.defaultFontSize;
+    let lineFirst: ShapedWord | null = null; // first word of the line being built
+    let prev: ShapedWord | null = null;
+    let width = 0;
+    for (let i = from; i < to; i++) {
+      const word = words[i];
+      if (word.isSpace) continue;
+      const force =
+        isolate && prev !== null && prev.unitId !== word.unitId && (isHead(prev.role) || word.role === 'chapter' || word.role === 'heading');
+      const candRole = (lineFirst ? lineFirst.role : word.role) ?? defaultRole;
+      const candUnit = (lineFirst ? lineFirst.unitId : word.unitId) ?? defaultUnitId;
+      const lineIndexInUnit = count > 0 && tailUnit === candUnit ? tailCount : 0;
+      // the style of the current line changes rarely: look it up only then
+      if (candRole !== curRole || candUnit !== curUnit || lineIndexInUnit !== curLineIdx) {
+        curRole = candRole;
+        curUnit = candUnit;
+        curLineIdx = lineIndexInUnit;
+        curAvail = availFor(candRole, candUnit, lineIndexInUnit);
+        if (this.designSettings) {
+          const st = styleOf(candRole, candUnit);
+          curWs = st.character.wordSpacingRatio ?? 1.0;
+          curFs = st.character.fontSizePt ?? this.defaultFontSize;
+        }
+      }
+      const avail = curAvail;
+      const space = this.designSettings
+        ? Math.max(1.5, (word.fontSizePt ?? curFs) * 0.32 * (word.wordSpacingRatio ?? curWs))
+        : baseSpace;
+      const need = lineFirst ? space : 0;
+      if (lineFirst && (force || width + need + word.width > avail)) {
+        const u = lineFirst.unitId ?? defaultUnitId;
+        count++;
+        if (u === tailUnit) tailCount++;
+        else {
+          tailUnit = u;
+          tailCount = 1;
+        }
+        lineFirst = word;
+        width = word.width;
+      } else {
+        if (!lineFirst) lineFirst = word;
+        width += need + word.width;
+      }
+      prev = word;
+    }
+    if (lineFirst) count++;
+    return count;
+  }
+
+  private countIsolateMemo = new Map<string, boolean>();
+  private countBaseSpace: number | undefined;
+  private countStyleMemo = new Map<string, ReturnType<typeof DesignSettingsEngine.resolveStyle>>();
+  private countIndentMemo = new Map<string, number>();
+
   /** 'optimal' (Knuth–Plass, default) or 'greedy' (first fit, legacy). */
   public lineBreaking(): 'optimal' | 'greedy' {
     const m = (this.designSettings as { lineBreaking?: string } | undefined)?.lineBreaking ?? TypesetterEngine.defaultLineBreaking;
@@ -398,9 +513,40 @@ export class TypesetterEngine {
     lineHeight?: number,
     justify: boolean = true,
     /** Override the book's line breaking for this call (planner counts use 'greedy'). */
-    breaking?: 'optimal' | 'greedy'
+    breaking?: 'optimal' | 'greedy',
+    /** Only the number of lines matters (planner probes): skip the finishing pass. */
+    countOnly: boolean = false
   ): TypesetLine[] {
     if (nonSpaceWords.length === 0 || targetWidth <= 10) return [];
+
+    // One style lookup per (role, unit) for this call — it was resolved
+    // again for every word (T13: the Gemara engine calls this thousands of
+    // times while it searches for the knee). Read-only here.
+    const styleMemo = new Map<string, ReturnType<typeof DesignSettingsEngine.resolveStyle>>();
+    const styleOf = (role: ContentRole | string, unitId: string) => {
+      const k = `${role}|${unitId}`;
+      let r = styleMemo.get(k);
+      if (!r) {
+        r = DesignSettingsEngine.resolveStyle(this.designSettings!, { role: role as ContentRole, unitId });
+        styleMemo.set(k, r);
+      }
+      return r;
+    };
+
+    // How many lines of `unitId` end the list so far (its line index in the
+    // unit) — kept as a running count; walking back over the lines for
+    // every word was quadratic in paragraph length.
+    let tailUnit: string | undefined;
+    let tailCount = 0;
+    const runOf = (unitId: string): number => (lines.length > 0 && tailUnit === unitId ? tailCount : 0);
+    const noteLinePushed = () => {
+      const u = lines[lines.length - 1].unitId;
+      if (u === tailUnit) tailCount++;
+      else {
+        tailUnit = u;
+        tailCount = 1;
+      }
+    };
 
     const effectiveLineHeight = lineHeight ?? this.shaper.getLineHeight();
     const spaceWord = this.shaper.shapeWord(' ');
@@ -455,17 +601,11 @@ export class TypesetterEngine {
 
       const candidateRole = currentWords.length > 0 ? (currentWords[0].role ?? defaultRole) : (word.role ?? defaultRole);
       const candidateUnitId = currentWords.length > 0 ? (currentWords[0].unitId ?? defaultUnitId) : (word.unitId ?? defaultUnitId);
-      let lineIndexInUnit = 0;
-      for (let li = lines.length - 1; li >= 0 && lines[li].unitId === candidateUnitId; li--) {
-        lineIndexInUnit++;
-      }
+      const lineIndexInUnit = runOf(candidateUnitId);
       let lineAvailableWidth = targetWidth;
       let unitSpaceWidth = spaceWord.width;
       if (this.designSettings) {
-        const resStyle = DesignSettingsEngine.resolveStyle(this.designSettings, {
-          role: candidateRole,
-          unitId: candidateUnitId,
-        });
+        const resStyle = styleOf(candidateRole, candidateUnitId);
         const ind = computeParagraphLineIndents(resStyle.paragraph, lineIndexInUnit);
         lineAvailableWidth = Math.max(
           40,
@@ -523,6 +663,7 @@ export class TypesetterEngine {
           role: lineRole,
           unitId: lineUnitId,
         });
+        noteLinePushed();
 
         currentWords = [word];
         currentWidth = word.width;
@@ -539,16 +680,10 @@ export class TypesetterEngine {
     if (currentWords.length > 0) {
       const lineRole = currentWords[0].role ?? defaultRole;
       const lineUnitId = currentWords[0].unitId ?? defaultUnitId;
-      let lineIndexInUnit = 0;
-      for (let li = lines.length - 1; li >= 0 && lines[li].unitId === lineUnitId; li--) {
-        lineIndexInUnit++;
-      }
+      const lineIndexInUnit = runOf(lineUnitId);
       let lastLineAvailableWidth = targetWidth;
       if (this.designSettings) {
-        const resPara = DesignSettingsEngine.resolveStyle(this.designSettings, {
-          role: lineRole,
-          unitId: lineUnitId,
-        }).paragraph;
+        const resPara = styleOf(lineRole, lineUnitId).paragraph;
         const ind = computeParagraphLineIndents(resPara, lineIndexInUnit);
         lastLineAvailableWidth = Math.max(
           40,
@@ -571,7 +706,11 @@ export class TypesetterEngine {
         role: lineRole,
         unitId: lineUnitId,
       });
+      noteLinePushed();
     }
+
+    // Line counting (planner probes) needs no justification / styling pass.
+    if (countOnly) return lines;
 
     // Local 2-Line Tail Reflow:
     // If the final line of a paragraph/unit is an isolated 1-word tail (or tiny heading fragment like "א׳")
@@ -630,14 +769,13 @@ export class TypesetterEngine {
       }
     }
 
+    const runIndex: number[] = [];
+    for (let i = 0; i < lines.length; i++) runIndex.push(i > 0 && lines[i - 1].unitId === lines[i].unitId ? runIndex[i - 1] + 1 : 0);
     return lines.map((line, idx) => {
       const isBoundaryAfter = idx === lines.length - 1 || lines[idx + 1].unitId !== line.unitId;
       line.unitBoundaryAfter = isBoundaryAfter;
       if (this.designSettings) {
-        const resolved = DesignSettingsEngine.resolveStyle(this.designSettings, {
-          role: line.role ?? defaultRole,
-          unitId: line.unitId ?? defaultUnitId,
-        });
+        const resolved = styleOf(line.role ?? defaultRole, line.unitId ?? defaultUnitId);
         const p = resolved.paragraph;
         const c = resolved.character;
         const isLastOfUnit = Boolean(line.isLastLine) || isBoundaryAfter;
@@ -671,10 +809,7 @@ export class TypesetterEngine {
         line.paragraphAlignment = effAlign;
         line.lastLineAlignment = p.lastLineAlignment;
         line.direction = p.direction;
-        let lineIndexInUnit = 0;
-        for (let k = idx - 1; k >= 0 && lines[k].unitId === line.unitId; k--) {
-          lineIndexInUnit++;
-        }
+        const lineIndexInUnit = runIndex[idx];
         const isFirstOfUnit = lineIndexInUnit === 0;
         const ind = computeParagraphLineIndents(p, lineIndexInUnit);
         line.firstLineIndent = ind.firstLineIndentPt;

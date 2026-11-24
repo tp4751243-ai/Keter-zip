@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DocxImporter, flagUncertainMatches, describeConfidence, type DocxImportResult } from '../engine/docx-importer';
 import { classifyForImport, type AutoLayoutImportInfo } from '../engine/auto-layout';
-import { linkChumashCommentaries, looksLikeChumash } from '../engine/chumash-linker';
+import { linkByDafHeadings, linkChumashCommentaries, looksLikeChumash } from '../engine/chumash-linker';
 import { analyzeImportedDocx, formatPreviewCounts, type DocxPreviewStats } from '../engine/docx-semantics';
 // v0.9.8 Phase 3 — CommentaryLinkerEngine: the new fuzzy dibbur linker
 // runs over the old linker's output and the merge keeps the
@@ -494,7 +494,16 @@ export const DocxImportHub: React.FC<DocxImportHubProps> = ({
       // a second). The Gemara linkers placed 6% correctly there and took
       // 9 s, then sent ~1,800 links to review.
       const chumashBook = archetypeId === 'chumash' || looksLikeChumash(allUnits, primaryTitle);
-      if (autoDiscoverLinks && filesList.length > 1 && chumashBook) {
+      // Layout training T13 — files that mark every amud ("דף ב.") are
+      // linked amud by amud (a whole tractate in about a second).
+      // (tried first, whatever card is selected: only files that carry daf
+      // headings qualify, so a Chumash is never linked this way)
+      const byDaf = autoDiscoverLinks && filesList.length > 1 ? linkByDafHeadings(allUnits) : null;
+      if (byDaf) {
+        setImportStatus(t("מזהה קישורים אוטומטיים בין המפרשים לגמרא לפי דיבור המתחיל..."));
+        discoveredLinks = byDaf.links;
+        setLinkingReport(null);
+      } else if (autoDiscoverLinks && filesList.length > 1 && chumashBook) {
         setImportStatus(t("מזהה קישורים אוטומטיים בין המפרשים לגמרא לפי דיבור המתחיל..."));
         // let the status paint before the work starts
         await new Promise(r => setTimeout(r, 0));

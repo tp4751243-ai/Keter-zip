@@ -61,10 +61,19 @@ const berakhot = JSON.parse(fs.readFileSync('training/vilna/berakhot/corpus.json
   });
   const d = classifyForImport(units, [], { fileName: 'berakhot.docx' }).decision;
   check('Berakhot (Gemara + Rashi + Tosafot) is still laid out as a Gemara', typeOf(d.recipeId) === 'talmud', `${d.recipeId}: ${d.lineEn}`);
-  // Imported into a book the user made a Chumash: stays a Chumash.
+  // Imported while the home screen still had the Chumash card selected
+  // (user report, T13): unmistakable Gemara — Tosafot + Gemara phrasing —
+  // is laid out as a Gemara, not forced into the card's type.
   const info = classifyForImport(units, [], { fileName: 'berakhot.docx' });
   const kept = constrainDecisionToSeferType(info.decision, info.classification, 'chumash');
-  check('import into a Chumash book keeps the Chumash type', typeOf(kept.recipeId) === 'chumash', kept.lineEn);
+  check('clear Gemara imported with the Chumash card selected → Gemara', typeOf(kept.recipeId) === 'talmud', kept.lineEn);
+}
+{
+  // Content WITHOUT clear evidence keeps the type the user chose.
+  const units = ['והנה עיקר הדבר הוא', 'ועל כן יש לומר כך', 'וזה מה שאמרו חכמים'].map((t, i) => unit(`p${i}`, 'main_source', t.repeat(4)));
+  const info = classifyForImport(units, [], { fileName: 'notes.docx' });
+  const kept = constrainDecisionToSeferType(info.decision, info.classification, 'chumash');
+  check('ambiguous text imported into a Chumash book keeps the Chumash type', typeOf(kept.recipeId) === 'chumash', `${kept.recipeId}: ${kept.lineEn}`);
   const free = constrainDecisionToSeferType(info.decision, info.classification, 'talmud');
   check('import into a Talmud (default) book lets the content decide', free.recipeId === info.decision.recipeId);
 }

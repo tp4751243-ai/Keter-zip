@@ -3555,7 +3555,53 @@ export class DesignSettingsEngine {
    *   3. `settings.projectRoleStyles[role]` (`PROJECT_STYLE`)
    *   4. Matching `settings.localOverrides` (`LOCAL_OVERRIDE`)
    */
+  /**
+   * Layout training T13 — style lookups are memoized DURING a layout pass
+   * (settings are read-only there). The Gemara engine typesets the same
+   * text many times while searching for the knee, and resolved the style
+   * again for every word: 17 of 28 seconds for three pages of a tractate.
+   * Only active between beginLayoutStyleCache / endLayoutStyleCache.
+   */
+  private static layoutStyleCacheDepth = 0;
+  private static layoutStyleCache: WeakMap<object, Map<string, ReturnType<typeof DesignSettingsEngine.resolveRoleAndUnitStyleUncached>>> = new WeakMap();
+  public static beginLayoutStyleCache(): void {
+    this.layoutStyleCacheDepth++;
+  }
+  public static endLayoutStyleCache(): void {
+    this.layoutStyleCacheDepth = Math.max(0, this.layoutStyleCacheDepth - 1);
+    if (this.layoutStyleCacheDepth === 0) this.layoutStyleCache = new WeakMap();
+  }
+
   public static resolveRoleAndUnitStyle(
+    settings: ProfessionalDesignSettings,
+    role: SemanticStyleRole | ContentRole,
+    unitId?: string,
+    wordIndex?: number
+  ): ReturnType<typeof DesignSettingsEngine.resolveRoleAndUnitStyleUncached> {
+    if (this.layoutStyleCacheDepth === 0 || wordIndex !== undefined || !settings) {
+      return this.resolveRoleAndUnitStyleUncached(settings, role, unitId, wordIndex);
+    }
+    let m = this.layoutStyleCache.get(settings);
+    if (!m) {
+      m = new Map();
+      this.layoutStyleCache.set(settings, m);
+    }
+    const key = `${role}|${unitId ?? ''}`;
+    let r = m.get(key);
+    if (!r) {
+      r = this.resolveRoleAndUnitStyleUncached(settings, role, unitId, wordIndex);
+      m.set(key, r);
+    }
+    // callers may adjust what they get: hand out copies
+    return {
+      ...r,
+      character: { ...r.character, openTypeFeatures: { ...r.character.openTypeFeatures } },
+      paragraph: { ...r.paragraph, tabStopsPt: [...r.paragraph.tabStopsPt] },
+      localOverrideIds: [...r.localOverrideIds],
+    };
+  }
+
+  private static resolveRoleAndUnitStyleUncached(
     settings: ProfessionalDesignSettings,
     role: SemanticStyleRole | ContentRole,
     unitId?: string,

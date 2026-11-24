@@ -284,3 +284,118 @@ export function looksLikeChumash(units: ContentUnit[], title = ''): boolean {
   const sof = ps.filter(u => /׃\s*$|[֑-֯]/.test(u.rawText)).length;
   return sof >= ps.length * 0.5 || /בראשית|שמות|ויקרא|במדבר|דברים|חומש/.test(title.replace(/[֑-ׇ]/g, ''));
 }
+
+// ── Layout training T13 — Talmud: link by amud ("דף ב." headings) ─────────
+
+/** "דף ב." / "דף ב:" / "דף ב ע״א" → a normalized amud key ("ב.", "ב:"); null otherwise. */
+export function dafHeadingKey(text: string): string | null {
+  const t = text.replace(/[֑-ׇ]/g, '').replace(/["״׳']/g, '').trim();
+  const m = /^דף\s+([א-ת]{1,4})\s*([.:]|ע[אב])?\s*$/.exec(t);
+  if (!m) return null;
+  const side = m[2] === ':' || m[2] === 'עב' ? ':' : '.';
+  return `${m[1]}${side}`;
+}
+
+/**
+ * When every uploaded file marks its amudim ("דף ב." …), each Rashi /
+ * Tosafot is matched only against the Gemara of ITS amud, by a monotone
+ * alignment of dibbur words to the Gemara paragraphs (same scoring as the
+ * Chumash linker). A whole Berakhot: no 10-second all-against-all scan,
+ * and no thousand-link review queue. Returns null when the files carry no
+ * amud headings (the Gemara linkers then run as before).
+ */
+export function linkByDafHeadings(units: ContentUnit[]): ChumashLinkResult | null {
+  // amud of every unit, per file
+  const amudOf = new Map<string, string>();
+  let file: number | undefined = undefined;
+  let cur = '';
+  let headings = 0;
+  for (const u of units) {
+    if (u.importFileIndex !== file) {
+      file = u.importFileIndex;
+      cur = '';
+    }
+    if (u.role === 'heading' || u.role === 'chapter' || u.role === 'subtitle') {
+      const k = dafHeadingKey(u.rawText);
+      if (k) {
+        cur = k;
+        headings++;
+      }
+      continue;
+    }
+    amudOf.set(u.id, cur);
+  }
+  const sources = units.filter(u => u.role === 'main_source' && amudOf.get(u.id));
+  const comments = units.filter(u => COMMENT_ROLES.has(u.role));
+  const commentsWithAmud = comments.filter(c => amudOf.get(c.id));
+  if (headings < 4 || sources.length === 0 || commentsWithAmud.length < comments.length * 0.8) return null;
+
+  const srcByAmud = new Map<string, ContentUnit[]>();
+  for (const s of sources) srcByAmud.set(amudOf.get(s.id)!, [...(srcByAmud.get(amudOf.get(s.id)!) ?? []), s]);
+  const sWords = new Map(sources.map(s => [s.id, chumashWords(s.rawText)]));
+  const links: RavTextLink[] = [];
+  let matched = 0;
+  const streams = new Map<string, ContentUnit[]>();
+  for (const c of commentsWithAmud) {
+    const key = `${c.importFileIndex ?? ''}|${c.role === 'dibbur_hamatchil' ? 'primary_comment' : c.role}`;
+    streams.set(key, [...(streams.get(key) ?? []), c]);
+  }
+  for (const [, stream] of streams) {
+    const byAmud = new Map<string, ContentUnit[]>();
+    for (const c of stream) byAmud.set(amudOf.get(c.id)!, [...(byAmud.get(amudOf.get(c.id)!) ?? []), c]);
+    for (const [amud, cs] of byAmud) {
+      const ps = srcByAmud.get(amud);
+      if (!ps?.length) continue; // no Gemara for this amud: leave unlinked
+      const m = cs.length, n = ps.length;
+      const S = cs.map(c => {
+        const d = chumashWords(dibburOf(c));
+        return Float32Array.from(ps.map(p => dibburScore(d, sWords.get(p.id)!)));
+      });
+      const best: Float32Array[] = [];
+      for (let i = 0; i < m; i++) {
+        const row = new Float32Array(n);
+        let prefix = i === 0 ? 0 : -Infinity;
+        for (let j = 0; j < n; j++) {
+          if (i > 0) prefix = Math.max(prefix, best[i - 1][j]);
+          row[j] = S[i][j] + prefix;
+        }
+        best.push(row);
+      }
+      const choice = new Array<number>(m);
+      let limit = n - 1;
+      for (let i = m - 1; i >= 0; i--) {
+        let bj = 0;
+        let bv = -Infinity;
+        for (let j = 0; j <= limit; j++) if (best[i][j] > bv + 1e-6) { bv = best[i][j]; bj = j; }
+        choice[i] = bj;
+        limit = bj;
+      }
+      cs.forEach((c, i) => {
+        const p = ps[choice[i]];
+        const s = S[i][choice[i]];
+        if (s >= 0.5) matched++;
+        // Same amud is certain; the paragraph within it is a match or the
+        // reading order — either way on the right daf, so never reviewed.
+        const score = s >= 0.99 ? 0.97 : s >= 0.5 ? 0.9 : 0.85;
+        links.push({
+          linkId: `amud-${c.id}`,
+          sourceUnitId: p.id,
+          commentaryUnitId: c.id,
+          dibburHamatchil: dibburOf(c),
+          isUserLocked: false,
+          confidenceScore: score,
+          matchConfidence: {
+            score,
+            reasonHe: s >= 0.5 ? `דיבור המתחיל נמצא בגמרא (דף ${amud})` : `באותו עמוד (דף ${amud}), לפי סדר הקריאה`,
+            reasonEn: s >= 0.5 ? `Dibbur found in the Gemara (daf ${amud})` : `Same amud (daf ${amud}), by reading order`,
+            matchedText: p.rawText.slice(0, 60),
+          },
+          sourceSnippet: p.rawText.slice(0, 60),
+          commentarySnippet: c.rawText.slice(0, 60),
+          commentaryType: c.role === 'secondary_comment' ? 'Tosafot' : c.role === 'primary_comment' || c.role === 'dibbur_hamatchil' ? 'Rashi' : 'Other',
+        });
+      });
+    }
+  }
+  return { links, matched, total: comments.length, introUnitIds: comments.filter(c => !amudOf.get(c.id)).map(c => c.id) };
+}

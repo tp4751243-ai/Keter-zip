@@ -209,6 +209,16 @@ export class PaginationEngine {
    * Paginates all content units across multiple pages with global look-ahead optimization
    */
   public static paginateDocument(input: PaginationInput): BookTypesetDocument {
+    // Settings are read-only during layout: memoize style lookups (T13).
+    DesignSettingsEngine.beginLayoutStyleCache();
+    try {
+      return this.paginateDocumentInner(input);
+    } finally {
+      DesignSettingsEngine.endLayoutStyleCache();
+    }
+  }
+
+  private static paginateDocumentInner(input: PaginationInput): BookTypesetDocument {
     const {
       title,
       layoutType,
@@ -727,7 +737,9 @@ export class PaginationEngine {
     // themselves, so no setting left over from another type can leak.
     const talmudFolio = isTalmudFolio(designSettings, layoutType);
     const vilnaHeaderOn = talmudFolio && runningHeaderCfg?.useStructuredVilnaHeader === true;
-    const perakim = vilnaHeaderOn ? derivePerakim(units) : new Map<string, PerekInfo>();
+    // perek names come from the ORIGINAL text — the opening word has been
+    // moved into the frame in `units` ("קורין את" instead of "מאימתי קורין").
+    const perakim = vilnaHeaderOn ? derivePerakim(rawUnits ?? units) : new Map<string, PerekInfo>();
     const vilnaMasechet = vilnaHeaderOn ? resolveMasechetName(runningHeaderCfg, title, units) : '';
     const vilnaHeaderSize =
       runningHeaderCfg?.vilnaHeaderFontSizePt ?? Math.round(effectiveSourceFontSize * 1.6 * 10) / 10;
@@ -4323,7 +4335,13 @@ export class PaginationEngine {
       let lookAheadCandidatesTested = 1;
       let candidateBreakChosen = false;
 
-      if (upcomingBoundaries.length > 1) {
+      // T13 — the measured planner below decides every page that still has
+      // Gemara (and overwrites this one's targets), so this look-ahead —
+      // which probed every upcoming boundary plus a "next page" made of the
+      // whole rest of the book — only runs where its result is used.
+      const measuredPlannerDecides =
+        designSettings?.ravText?.pagePlanner !== 'legacy' && sCursor < sourceShapedAll.length;
+      if (upcomingBoundaries.length > 1 && !measuredPlannerDecides) {
         // Stage 4: Evaluate multiple group-boundary break candidates (`1..k` complete groups on Page p)
         // by probing both Page p AND look-ahead Page p+1 via real trial typesetting in DynamicKneeEngine!
         // Never greedily pack Page p if doing so leaves Page p+1 with a sparse widow/orphan fragment.
@@ -4684,6 +4702,17 @@ export class PaginationEngine {
           }))
           .filter(c => (seen.has(c.s) ? false : (seen.add(c.s), true)))
           .sort((a, b) => a.s - b.s);
+        // T13 — a page cannot hold more Gemara than its whole area set in
+        // Gemara type; search only boundaries up to twice that (the answer
+        // is always inside), not every boundary left in the tractate —
+        // whose first probes laid out half a masechta as one "page".
+        {
+          const areaWords = (contentWidth * contentHeight) / (sourceFontSize * 1.25 * sourceFontSize * 2.4);
+          const maxS = Math.max(40, Math.ceil(areaWords * 2));
+          const within = cands.filter(c => c.s <= maxS);
+          const keep = Math.max(within.length + 1, 2);
+          cands.splice(keep);
+        }
         if (cands.length > 0) {
           let lo = 0;
           let hi = cands.length - 1;

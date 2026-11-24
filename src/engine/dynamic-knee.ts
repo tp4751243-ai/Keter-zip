@@ -94,11 +94,14 @@ interface CandidateConfig {
  * `hits` counts trial counts served from the memo instead of
  * re-typesetting; `misses` counts fresh trial typesets.
  */
-export const trialLineCacheStats = { hits: 0, misses: 0 };
+const prefixWidthCache = new WeakMap<ShapedWord[], Float64Array>();
+export const trialLineCacheStats = { hits: 0, misses: 0, pageSolves: 0, candidateSolves: 0 };
 
 export function resetTrialLineCacheStats(): void {
   trialLineCacheStats.hits = 0;
   trialLineCacheStats.misses = 0;
+  trialLineCacheStats.pageSolves = 0;
+  trialLineCacheStats.candidateSolves = 0;
 }
 
 export class DynamicKneeEngine {
@@ -323,7 +326,9 @@ export class DynamicKneeEngine {
 
     let bestResult: ReturnType<typeof this.solveSingleCandidate> | null = null;
 
+    trialLineCacheStats.pageSolves++;
     for (const candidate of candidates) {
+      trialLineCacheStats.candidateSolves++;
       const solved = this.solveSingleCandidate(input, candidate);
       const solvedOverflow =
         Math.max(0, sCount - solved.consumedSourceWords) +
@@ -637,15 +642,31 @@ export class DynamicKneeEngine {
       trialLineCacheStats.misses++;
       // The knee sets its lines one by one (first fit + T10 tightening),
       // so the planner counts them the same way — and fast.
-      const counted = engine.typesetShapedWords(
-        words.slice(startIdx),
-        targetWidth,
-        role,
-        unitId,
-        lineH,
-        true,
-        'greedy'
-      ).length;
+      // T13 — a page only ever needs to know about text it could hold:
+      // stop at ~2.5 pages' worth of lines (by natural width). Short
+      // remainders are counted exactly as before; a whole tractate's
+      // remainder no longer gets typeset again for every probe (that made
+      // each page cost seconds and grow with the book).
+      const capLines = Math.ceil((contentHeight * 2.5) / Math.max(4, lineH));
+      const capWidth = capLines * targetWidth;
+      // first index whose running width passes the cap (prefix sums +
+      // binary search; walking the words for every probe was a hot spot)
+      let prefix = prefixWidthCache.get(words);
+      if (!prefix) {
+        prefix = new Float64Array(words.length + 1);
+        for (let i = 0; i < words.length; i++) prefix[i + 1] = prefix[i] + words[i].width + 3;
+        prefixWidthCache.set(words, prefix);
+      }
+      let lo = startIdx;
+      let hi = words.length;
+      const limit = prefix[startIdx] + capWidth;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (prefix[mid] <= limit) lo = mid + 1;
+        else hi = mid;
+      }
+      const endIdx = Math.min(words.length, lo + 1);
+      const counted = engine.countGreedyLines(words, startIdx, endIdx, targetWidth, role, unitId ?? 'unit-1');
       if (trialLineCache.size > 4096) trialLineCache.clear();
       trialLineCache.set(key, counted);
       return counted;

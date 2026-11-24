@@ -30,8 +30,8 @@ for (const [f, fam] of [
 import type { ContentRole, ContentUnit, RavTextLink } from '../../src/types/typesetter';
 import { DocxImporter, flagUncertainMatches } from '../../src/engine/docx-importer';
 import { linkCommentariesToSource, anchorLinksToRavTextLinks, mergeLinkSets } from '../../src/engine/commentary-linker';
-import { classifyForImport, applyRecipeToSettingsById } from '../../src/engine/auto-layout';
-import { linkChumashCommentaries, looksLikeChumash } from '../../src/engine/chumash-linker';
+import { classifyForImport, applyRecipeToSettingsById, constrainDecisionToSeferType } from '../../src/engine/auto-layout';
+import { linkByDafHeadings, linkChumashCommentaries, looksLikeChumash } from '../../src/engine/chumash-linker';
 import { DesignSettingsEngine } from '../../src/engine/design-settings-engine';
 import { PaginationEngine } from '../../src/engine/pagination-engine';
 
@@ -39,7 +39,7 @@ const dir = process.argv[2];
 const budget = process.argv.includes('--budget-ms') ? Number(process.argv[process.argv.indexOf('--budget-ms') + 1]) : 0;
 const RETAG: ContentRole[] = ['main_source', 'verse', 'primary_comment', 'secondary_comment', 'tertiary_comment', 'regular_paragraph'];
 const slotRole = (name: string): ContentRole =>
-  /תרגום|אונקלוס/.test(name) ? 'verse' : /רש/.test(name) ? 'primary_comment' : /רמב/.test(name) ? 'secondary_comment' : /עזרא|ספורנו/.test(name) ? 'tertiary_comment' : 'main_source';
+  /תרגום|אונקלוס/.test(name) ? 'verse' : /רש/.test(name) ? 'primary_comment' : /רמב|תוספות/.test(name) ? 'secondary_comment' : /עזרא|ספורנו/.test(name) ? 'tertiary_comment' : 'main_source';
 
 const times: Array<[string, number]> = [];
 const timed = async <T>(label: string, f: () => T | Promise<T>): Promise<T> => {
@@ -69,13 +69,29 @@ async function main() {
       all.push(u);
     }
   }
+  if (process.env.TRIM_DAF) {
+    // keep, per file, everything before its (N+1)-th "דף" heading
+    const n = Number(process.env.TRIM_DAF);
+    const seen = new Map<number, number>();
+    const kept = all.filter(u => {
+      const f = u.importFileIndex ?? 0;
+      if ((u.role === 'heading' || u.role === 'chapter') && /^\s*דף\s/.test(u.rawText)) seen.set(f, (seen.get(f) ?? 0) + 1);
+      return (seen.get(f) ?? 0) <= n;
+    });
+    all.splice(0, all.length, ...kept);
+  }
   const sources = all.filter(u => u.role === 'main_source' || u.role === 'chapter');
   const comms = all.filter(u => u.role === 'primary_comment' || u.role === 'secondary_comment' || u.role === 'tertiary_comment');
   console.log(`units ${all.length}: sources ${sources.length}, commentaries ${comms.length}`);
   // As DocxImportHub: a Chumash book is linked by chapter + pasuk words;
   // anything else by the Gemara linkers (old + new, merged).
   let links: RavTextLink[];
-  if (!process.env.GEMARA_LINKERS && looksLikeChumash(all, files[0])) {
+  const tL = performance.now();
+  const byDaf = process.env.GEMARA_LINKERS ? null : linkByDafHeadings(all);
+  if (byDaf) {
+    links = byDaf.links;
+    console.log(`amud linker ${(performance.now() - tL).toFixed(0)} ms: dibbur found for ${byDaf.matched}/${byDaf.total}, unplaced ${byDaf.total - byDaf.links.length}`);
+  } else if (!process.env.GEMARA_LINKERS && looksLikeChumash(all, files[0])) {
     const r = await timed('chumash linker', () => linkChumashCommentaries(all));
     links = r.links;
     console.log(`chumash linker: placed ${r.matched}/${r.total} (exact by פסוק marker: ${r.links.filter(l => l.confidenceScore === 1).length}), introductions ${r.introUnitIds.length}`);
@@ -116,13 +132,19 @@ async function main() {
   const auto = await timed('classify', () => classifyForImport(all, links, { fileName: files[0], hasFootnotes: false }));
   const uncertain = flagUncertainMatches(links);
   console.log(`links ${links.length}, uncertain (review queue) ${uncertain.length}; review UI would render ${uncertain.length} × ${sources.length} source options`);
-  const settings = await timed('settings (chumash-rishonim)', () => applyRecipeToSettingsById('chumash-rishonim', DesignSettingsEngine.createDefaultSettings({ layoutType: 'rav_text' })));
+  console.log('DECISION', auto.decision?.recipeId, auto.decision?.layoutType, JSON.stringify(auto.classification.markers));
+  if (process.env.BOOK_TYPE) {
+    const c = constrainDecisionToSeferType(auto.decision!, auto.classification, process.env.BOOK_TYPE as any);
+    console.log('WITH BOOK TYPE', process.env.BOOK_TYPE, '->', c.recipeId, c.layoutType, '|', c.lineEn);
+  }
+  const settings = await timed('settings', () => applyRecipeToSettingsById(process.env.RECIPE ?? auto.decision?.recipeId ?? 'chumash-rishonim', DesignSettingsEngine.createDefaultSettings({ layoutType: 'rav_text' })));
   const log = console.log;
   console.log = (...a: unknown[]) => { if (typeof a[0] === 'string' && a[0].startsWith('Diagnostic:')) return; log(...a); };
   const doc = await timed(`paginate (${settings.layout.layoutType})`, () => PaginationEngine.paginateDocument({
     title: files[0].replace(/\.docx$/, ''), layoutType: settings.layout.layoutType as any, units: all, links, geometry: settings.pageLayout.geometry, designSettings: settings,
   }));
   console.log = log;
+  { const { trialLineCacheStats } = await import('../../src/engine/dynamic-knee'); console.log('trial line probes', JSON.stringify(trialLineCacheStats)); }
   console.log(`pages ${doc.pages.length} (introduction pages ${doc.pages.filter(p => p.chumashIntro).length}); decision ${auto.decision?.recipeId}`);
   if (process.env.RENDER_DIR) {
     const { PdfExporter } = await import('../../src/engine/pdf-exporter');

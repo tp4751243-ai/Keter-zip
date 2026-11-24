@@ -2701,9 +2701,16 @@ export class PdfExporter {
       this.canvasFontsLoadPromise = (async () => {
         for (const spec of KETER_EMBEDDED_FONTS) {
           const weight = spec.fontStyle === 'bold' ? '700' : '400';
-          const fontUrl = new URL(spec.publicPath, document.baseURI).href;
-          const face = new FontFace(spec.fontFamily, `url("${fontUrl}")`, { weight });
+          // Resolve RELATIVE to the app (strip the leading '/'): the
+          // installed app loads dist/index.html from disk, where '/fonts/…'
+          // meant the root of drive C: (file:///C:/fonts/…). The bytes are
+          // read with the loader that can read file:// (XHR), and the face
+          // is built from them — no URL fetch by the font loader at all.
+          const fontUrl = new URL(spec.publicPath.replace(/^\//, ''), document.baseURI).href;
           try {
+            const bytes = await PdfNativeTextEngine.loadPublicBinary(spec.publicPath);
+            if (!bytes) throw new Error('font file not found');
+            const face = new FontFace(spec.fontFamily, bytes, { weight });
             await face.load();
             document.fonts.add(face);
           } catch (error) {
