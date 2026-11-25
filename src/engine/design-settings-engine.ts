@@ -2115,7 +2115,7 @@ export class DesignSettingsEngine {
       settings.pageElements = {
         showRunningHeader: settings.pageLayout.showRunningHeader,
         showFolioNumber: true,
-        showDecorativeFrame: true,
+        showDecorativeFrame: false,
         runningHeaderFontSizePt: settings.pageLayout.runningHeaderFontSizePt,
         folioNumberPosition: settings.pageLayout.pageNumberPosition,
         // v0.5.0 Part B (Module 6): new projects hide the top header line.
@@ -2139,8 +2139,11 @@ export class DesignSettingsEngine {
     // v0.9.8 Phase 5 (Quick-Tune) — the header divider rule defaults to
     // ON: a header that used to show its rule keeps showing it.
     if (settings.pageElements.showHeaderDividerRule === undefined) {
-      settings.pageElements.showHeaderDividerRule = true;
+      // no line under the head unless the user turns it on
+      settings.pageElements.showHeaderDividerRule = false;
     }
+    // The decorative frame around the text block is retired.
+    settings.pageElements.showDecorativeFrame = false;
     // v0.5.0 (integrator): legacy settings without the new fields keep
     // the folio they already had (it was on by default) and the commentary
     // labels they already had (always shown before v0.5.0), and use Hebrew
@@ -2501,7 +2504,7 @@ export class DesignSettingsEngine {
       pageElements: {
         showRunningHeader: true,
         showFolioNumber: false,
-        showDecorativeFrame: true,
+        showDecorativeFrame: false,
         runningHeaderFontSizePt: 10.5,
         folioNumberPosition: 'top_outside',
         // v0.5.0 Part B (Module 6): the top header line is hidden by
@@ -2511,7 +2514,7 @@ export class DesignSettingsEngine {
         // defaults to ON (it only ever draws while the header line is
         // on, which is off by default — so this changes nothing visible
         // on a fresh book).
-        showHeaderDividerRule: true,
+        showHeaderDividerRule: false,
         // v0.5.0 (integrator — user request): commentary labels and page
         // numbers are also off by default on a fresh book; the number
         // format defaults to Hebrew letters with the "דף" prefix, matching

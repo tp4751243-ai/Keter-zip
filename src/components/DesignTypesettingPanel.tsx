@@ -1944,7 +1944,7 @@ export const DesignTypesettingPanel: React.FC<DesignTypesettingPanelProps> = ({
                     <input
                       type="checkbox"
                       data-testid="quick-tune-header-divider"
-                      checked={designSettings.pageElements.showHeaderDividerRule ?? true}
+                      checked={designSettings.pageElements.showHeaderDividerRule ?? false}
                       onChange={e => {
                         const next = DesignSettingsEngine.updatePageElementsSettings(
                           designSettings,

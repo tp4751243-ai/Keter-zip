@@ -1,3 +1,4 @@
+import { isTalmudFolio } from '../engine/sefer-type';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   HebrewGlyph,
@@ -1156,7 +1157,8 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
   );
   // v0.9.8 Phase 5: the divider rule under the header is its own toggle
   // (default ON) — it only ever draws while the header line is on.
-  const showHeaderDividerRule = pageElements?.showHeaderDividerRule ?? true;
+  // No rule under the head by default; never on a Talmud page (the Vilna has none).
+  const showHeaderDividerRule = (pageElements?.showHeaderDividerRule ?? false) && !isTalmudFolio(typesetResult.designSettings, layoutType);
   const headerHasVisibleSlot = runningHeaderHasVisibleSlot(resolvedHeader);
   // Band visibility: header line on with a slot to show, or — with the
   // line off — the folio alone in the top band (pre-v0.6.0 behaviour).

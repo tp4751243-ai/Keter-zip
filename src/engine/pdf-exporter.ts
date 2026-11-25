@@ -5,6 +5,7 @@
  * typography with full Nikud, Taamim, Noto Rashi Hebrew font, and mathematical word spacing justification.
  */
 
+import { isTalmudFolio } from './sefer-type';
 import { jsPDF } from 'jspdf';
 import {
   BookTypesetDocument,
@@ -595,20 +596,14 @@ export class PdfExporter {
     bleedPt: number,
     gray: [number, number, number]
   ): void {
-    if (bleedPt <= 0) return;
-    doc.setDrawColor(gray[0], gray[1], gray[2]);
-    doc.setLineWidth(0.5);
-    const len = bleedPt;
-    const corners: Array<[number, number, number, number]> = [
-      [bleedPt, bleedPt, -1, -1],
-      [mediaW - bleedPt, bleedPt, 1, -1],
-      [bleedPt, mediaH - bleedPt, -1, 1],
-      [mediaW - bleedPt, mediaH - bleedPt, 1, 1],
-    ];
-    for (const [x, y, sx, sy] of corners) {
-      doc.line(x, y, x + sx * len, y);
-      doc.line(x, y, x, y + sy * len);
-    }
+    // No crop marks: the user wants no marks in the page corners,
+    // anywhere in the software. The bleed and the PDF trim box stay, so a
+    // printer still has what it needs to trim.
+    void doc;
+    void mediaW;
+    void mediaH;
+    void bleedPt;
+    void gray;
   }
 
   // ── v0.5.0 (Title Page / Shaar Blat builder) ───────────────────────────
@@ -1662,8 +1657,9 @@ export class PdfExporter {
     // rendered before: Hebrew letters with "דף".
     const pageNumberStyle = designSettings?.pageElements?.pageNumberStyle ?? 'hebrew';
     const showDafPrefix = designSettings?.pageElements?.showDafPrefix ?? true;
-    const showDecorativeFrame =
-      designSettings?.pageElements?.showDecorativeFrame ?? false;
+    // The decorative frame around the text block is retired (no lines
+    // around the page anywhere).
+    const showDecorativeFrame = false;
     const folioNumberPosition =
       designSettings?.pageElements?.folioNumberPosition ??
       designSettings?.pageLayout?.pageNumberPosition ??
@@ -1790,8 +1786,9 @@ export class PdfExporter {
       folioInHeader,
       spreadSideIdx % 2 === 0 ? 'left' : 'right'
     );
+    // No rule under the head by default; never on a Talmud page (the Vilna has none).
     const showHeaderDividerRule =
-      designSettings?.pageElements?.showHeaderDividerRule ?? true;
+      !isTalmudFolio(designSettings, layoutType) && (designSettings?.pageElements?.showHeaderDividerRule ?? false);
 
     const planOpeningWordBox = page.openingWordBox
       ? {
@@ -2266,27 +2263,9 @@ export class PdfExporter {
     const contentW = mRight - mLeft;
     const contentH = mBottom - mTop;
 
-    // 2. Corner Crop Marks & Registration
-    ctx.strokeStyle = '#99948E';
-    ctx.lineWidth = 0.5;
-    const markLen = 14;
+    // No marks or frame around the page (the user: no lines around the
+    // margins or boxes in the corners, anywhere in the software).
 
-    ctx.beginPath();
-    ctx.moveTo(mLeft - 4, mTop); ctx.lineTo(mLeft - 4 - markLen, mTop);
-    ctx.moveTo(mLeft, mTop - 4); ctx.lineTo(mLeft, mTop - 4 - markLen);
-    ctx.moveTo(mRight + 4, mTop); ctx.lineTo(mRight + 4 + markLen, mTop);
-    ctx.moveTo(mRight, mTop - 4); ctx.lineTo(mRight, mTop - 4 - markLen);
-    ctx.moveTo(mLeft - 4, mBottom); ctx.lineTo(mLeft - 4 - markLen, mBottom);
-    ctx.moveTo(mLeft, mBottom + 4); ctx.lineTo(mLeft, mBottom + 4 + markLen);
-    ctx.moveTo(mRight + 4, mBottom); ctx.lineTo(mRight + 4 + markLen, mBottom);
-    ctx.moveTo(mRight, mBottom + 4); ctx.lineTo(mRight, mBottom + 4 + markLen);
-    ctx.stroke();
-
-    if (renderPlan.showDecorativeFrame) {
-      ctx.strokeStyle = '#8B7D6B';
-      ctx.lineWidth = 1.0;
-      ctx.strokeRect(mLeft - 6, mTop - 6, contentW + 12, contentH + 12);
-    }
 
     // v0.5.0 (Title Page / Shaar Blat builder): the title page draws its
     // border + fields here (no header, no folio, no body lines) and
@@ -2819,26 +2798,6 @@ export class PdfExporter {
     doc.rect(0, 0, mediaW, mediaH, 'F');
     this.drawTrimCropMarks(doc, mediaW, mediaH, bleedPt, grgb(153, 148, 142));
 
-    // 2. Corner Crop Marks & Registration (vector lines)
-    const cropRgb = grgb(153, 148, 142);
-    doc.setDrawColor(cropRgb[0], cropRgb[1], cropRgb[2]);
-    doc.setLineWidth(0.5);
-    const markLen = 14;
-    doc.line(mLeft - 4, mTop, mLeft - 4 - markLen, mTop);
-    doc.line(mLeft, mTop - 4, mLeft, mTop - 4 - markLen);
-    doc.line(mRight + 4, mTop, mRight + 4 + markLen, mTop);
-    doc.line(mRight, mTop - 4, mRight, mTop - 4 - markLen);
-    doc.line(mLeft - 4, mBottom, mLeft - 4 - markLen, mBottom);
-    doc.line(mLeft, mBottom + 4, mLeft, mBottom + 4 + markLen);
-    doc.line(mRight + 4, mBottom, mRight + 4 + markLen, mBottom);
-    doc.line(mRight, mBottom + 4, mRight, mBottom + 4 + markLen);
-
-    if (renderPlan.showDecorativeFrame) {
-      const frameRgb = grgb(139, 125, 107);
-      doc.setDrawColor(frameRgb[0], frameRgb[1], frameRgb[2]);
-      doc.setLineWidth(1.0);
-      doc.rect(mLeft - 6, mTop - 6, contentW + 12, contentH + 12, 'S');
-    }
 
     // Helper to draw multi-word or single-word header/folio strings in native RTL order
     const drawHeaderOrFolioPhrase = (

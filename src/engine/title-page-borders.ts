@@ -1172,6 +1172,7 @@ export function titlePageSettingsFromClassification(
   setField('author', classification.author);
   setField('publisher', classification.publisher);
   setField('year', classification.year);
-  tp.border = { ...tp.border, enabled: true, styleId: classification.suggestedBorderStyleId };
+  // No border is added on import: no lines around pages unless the user
+  // picks a frame in the title-page builder.
   return next;
 }

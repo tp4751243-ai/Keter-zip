@@ -942,7 +942,8 @@ export const DEFAULT_TITLE_PAGE_SETTINGS: TitlePageSettings = {
   volume: { text: '', fontFamily: '', fontSizePt: 13, alignment: 'center', spaceAbovePt: 8, spaceBelowPt: 4 },
   year: { text: '', fontFamily: '', fontSizePt: 12, alignment: 'center', spaceAbovePt: 4, spaceBelowPt: 6 },
   extraLines: [],
-  border: { enabled: true, styleId: 'double', thicknessPt: 1, insetMm: 12, scalePct: 100, paddingMm: 0, offsetXMm: 0, offsetYMm: 0 },
+  // no border around the title page unless the user picks one (no lines around pages by default)
+  border: { enabled: false, styleId: 'none', thicknessPt: 1, insetMm: 12, scalePct: 100, paddingMm: 0, offsetXMm: 0, offsetYMm: 0 },
   customBorderImage: null,
 };
 
