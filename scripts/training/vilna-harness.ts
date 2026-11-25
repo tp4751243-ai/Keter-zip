@@ -537,6 +537,28 @@ function scorePage(
     }
   }
 
+  // W1 — the print's proportions (user's reference pages): the narrow
+  // Gemara column is 40.6% of the Gemara + Rashi + Tosafot block and a
+  // narrow Gemara line holds about 6–7 words.
+  {
+    const src = page.sourceLines.filter(l => l.role === 'main_source' && l.xLeft !== undefined && l.xRight !== undefined && !l.isLastLine);
+    const all = [...page.sourceLines, ...page.rashiLines, ...page.tosafotLines].filter(l => l.xLeft !== undefined && l.xRight !== undefined);
+    if (src.length >= 4 && all.length) {
+      const blockW = Math.max(...all.map(l => l.xRight!)) - Math.min(...all.map(l => l.xLeft!));
+      const narrowW = Math.min(...src.map(l => l.xRight! - l.xLeft!));
+      const narrow = src.filter(l => l.xRight! - l.xLeft! < narrowW + 2);
+      const wordsPer = narrow.map(l => l.words.filter(w => !w.isSpace).length).sort((a, b) => a - b);
+      const medWords = wordsPer[Math.floor(wordsPer.length / 2)] ?? 0;
+      const ratio = narrowW / blockW;
+      out.push({
+        id: 'W1',
+        label: 'Print proportions: narrow Gemara 40.6% of the block, 5–8 words a line',
+        status: Math.abs(ratio - 0.406) <= 0.03 && medWords >= 5 && medWords <= 8 ? 'pass' : 'fail',
+        detail: `Gemara ${(ratio * 100).toFixed(1)}% of the ${blockW.toFixed(0)}pt block, ${medWords} words a narrow line`,
+      });
+    }
+  }
+
   // A1 — amud alignment (info): which Vilna amudim this page's Gemara came from.
   const amudim = new Map<string, number>();
   for (const l of plan.lines.filter(x => isSource(x.role))) {

@@ -34,6 +34,7 @@ import { ProfessionalDesignSettings } from '../types/design-settings';
 import { DesignSettingsEngine } from './design-settings-engine';
 import { applyGlyphStretch } from './line-breaker';
 import { isTalmudFolio } from './sefer-type';
+import { VILNA_PRINT } from './vilna-fit';
 
 export interface RavTextLayoutInput {
   sourceText: string;
@@ -426,7 +427,9 @@ export class DynamicKneeEngine {
       { layoutType: 'rav_text' },
       input.rulesConfig
     );
-    const gutter = input.designSettings?.ravText?.gutterWidthPt ?? gutterRule.value ?? 11.0;
+    const gutter = vilnaShape
+      ? Math.max(6, Math.round(contentWidth * VILNA_PRINT.gutterOfBlock * 10) / 10)
+      : input.designSettings?.ravText?.gutterWidthPt ?? gutterRule.value ?? 11.0;
 
     // Initialize 2D Spatial Available-Area & Exclusion Engine for this candidate
     const spatial = new SpatialExclusionEngine(contentWidth, contentHeight);
@@ -545,7 +548,15 @@ export class DynamicKneeEngine {
         ? contentWidth - minCommentW - gutter
         : contentWidth;
 
-    const defaultSourceWidth = Math.max(
+    // Vilna (measured on the print): Gemara 40.6% of the block, Rashi and
+    // Tosafot 26.3% each; with one commentary on the page the Gemara takes
+    // the other side.
+    const vilnaPrintFlankW = Math.round(contentWidth * VILNA_PRINT.flankOfBlock);
+    const defaultSourceWidth = vilnaShape && activeFlankCount > 0
+      ? activeFlankCount === 2
+        ? Math.round(contentWidth - 2 * vilnaPrintFlankW - 2 * gutter)
+        : Math.round(contentWidth - vilnaPrintFlankW - gutter)
+      : Math.max(
       minSourceW,
       Math.min(
         maxAllowedSourceW,
@@ -564,7 +575,7 @@ export class DynamicKneeEngine {
       0,
       contentWidth - defaultSourceWidth - gutter * activeFlankCount
     );
-    const rightBias = candidate.rightFlankBias ?? 0.5;
+    const rightBias = vilnaShape ? 0.5 : candidate.rightFlankBias ?? 0.5;
 
     let defaultRashiWidth = 0;
     let defaultTosafotWidth = 0;

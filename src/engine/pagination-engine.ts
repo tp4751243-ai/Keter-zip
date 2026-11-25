@@ -14,6 +14,7 @@
  * 4. Two-Column Vertical Balancing & Multi-Page Distribution (Problem 9).
  */
 
+import { VILNA_PRINT } from './vilna-fit';
 import { dafHeadingKey } from './chumash-linker';
 import { parseHebrewNumeral } from './hebrew-numerals';
 import {
@@ -191,6 +192,21 @@ export function splitTalmudIntoAmudim(units: ContentUnit[]): Array<{ key: string
     groups.get(key)!.push(u);
   }
   return mainKeys.map(key => ({ key, units: groups.get(key)! })).filter(g => g.units.length > 0);
+}
+
+/** The Gemara and commentary sizes (and their leading) scaled by `f` — one amud fitted to its page. */
+function scaleTalmudTextSizes(ds: ProfessionalDesignSettings | undefined, f: number): ProfessionalDesignSettings | undefined {
+  if (!ds) return ds;
+  let next = ds;
+  for (const role of ['main_source', 'primary_comment', 'secondary_comment', 'dibbur_hamatchil'] as const) {
+    const st = DesignSettingsEngine.resolveStyle(next, { role });
+    const size = Math.round(st.character.fontSizePt * f * 100) / 100;
+    next = DesignSettingsEngine.updateRoleCharacterStyle(next, role, { fontSizePt: size }, 'ai');
+    if (st.paragraph.leadingPt > 0) {
+      next = DesignSettingsEngine.updateRoleParagraphStyle(next, role, { leadingPt: Math.round(st.paragraph.leadingPt * f * 100) / 100 }, 'ai');
+    }
+  }
+  return next;
 }
 
 /** Body page index of an amud key (ב. → 0 with the default start at daf ב amud א). */
@@ -483,26 +499,39 @@ export class PaginationEngine {
           let first: BookTypesetDocument | null = null;
           amudim.forEach((g, gi) => {
             const ids = new Set(g.units.map(u => u.id));
-            const part = this.paginateRavText(
-              title,
-              layoutType,
-              g.units,
-              geometry,
-              contentWidth,
-              contentHeight,
-              effectiveSourceFontSize,
-              effectiveCommentaryFontSize,
-              kneeSettings,
-              enableOrnaments,
-              effectiveRavLinks?.filter(l => ids.has(l.sourceUnitId) && ids.has(l.commentaryUnitId)),
-              gi === 0 ? userSuppliedOrnaments : [],
-              userOrnamentRules,
-              rulesConfig,
-              designSettings,
-              gi === 0,
-              pages.length,
-              true
-            );
+            const layAmud = (f: number) =>
+              this.paginateRavText(
+                title,
+                layoutType,
+                g.units,
+                geometry,
+                contentWidth,
+                contentHeight,
+                effectiveSourceFontSize * f,
+                effectiveCommentaryFontSize * f,
+                kneeSettings,
+                enableOrnaments,
+                effectiveRavLinks?.filter(l => ids.has(l.sourceUnitId) && ids.has(l.commentaryUnitId)),
+                gi === 0 ? userSuppliedOrnaments : [],
+                userOrnamentRules,
+                rulesConfig,
+                f === 1 ? designSettings : scaleTalmudTextSizes(designSettings, f),
+                gi === 0,
+                pages.length,
+                true
+              );
+            // A Vilna amud is ONE page. An amud a little longer than the
+            // page is set a few percent smaller (at most 9%) so it fits;
+            // one that still does not fit keeps the book's size and
+            // continues on the next page.
+            let part = layAmud(1);
+            for (const f of [0.97, 0.94, 0.91]) {
+              if (part.pages.length <= 1) break;
+              const tighter = layAmud(f);
+              if (tighter.pages.length < part.pages.length) part = tighter;
+              if (tighter.pages.length <= 1) break;
+            }
+
             for (const pg of part.pages) pg.amudKey = g.key;
             pages.push(...part.pages);
             if (!first) first = part;
@@ -887,6 +916,10 @@ export class PaginationEngine {
             pageSide: spreadSide,
             fontFamily: vilnaHeaderFont,
             fontSizePt: vilnaHeaderSize,
+            blockInsetPt: Math.max(
+              0,
+              (pg.geometry.pageWidth - pg.geometry.marginInside - pg.geometry.marginOutside - Math.round(pg.geometry.pageWidth * VILNA_PRINT.blockOfPageWidth)) / 2
+            ),
           });
           // A Vilna daf carries no continuation notes.
           pg.continuationHeader = undefined;
@@ -4095,7 +4128,24 @@ export class PaginationEngine {
     const fullContentWidth = contentWidth;
     let marginGeom: MarginalColumnGeometry | null = null;
     let marginDx = 0;
-    if (marginalItems.length > 0) {
+    // Vilna (measured on the print): the Gemara + Rashi + Tosafot block is
+    // 66% of the page width, centred; the side space holds the margin
+    // columns. (Before, the block ran almost to the page edge, so every
+    // Gemara line held nearly twice the words of the Vilna.)
+    const vilnaBlockW = ravTalmud ? Math.round(pageGeometry.pageWidth * VILNA_PRINT.blockOfPageWidth) : 0;
+    const vilnaCarve = ravTalmud && contentWidth > vilnaBlockW + 20 ? (contentWidth - vilnaBlockW) / 2 : 0;
+    if (vilnaCarve > 0) {
+      const gap = Math.max(5, Math.round(pageGeometry.pageWidth * VILNA_PRINT.marginalGapOfPage));
+      const base = marginalColumnGeometry(contentWidth, sourceFontSize);
+      marginGeom = marginalItems.length > 0 ? { ...base, widthPt: Math.max(20, Math.round(vilnaCarve - gap)), gapPt: vilnaCarve - Math.max(20, Math.round(vilnaCarve - gap)) } : null;
+      marginDx = vilnaCarve;
+      geometry = {
+        ...geometry,
+        marginInside: geometry.marginInside + marginDx,
+        marginOutside: geometry.marginOutside + marginDx,
+      };
+      contentWidth -= 2 * marginDx;
+    } else if (marginalItems.length > 0) {
       marginGeom = marginalColumnGeometry(contentWidth, sourceFontSize);
       marginDx = marginGeom.widthPt + marginGeom.gapPt;
       geometry = {

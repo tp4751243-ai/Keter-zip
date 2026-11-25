@@ -16,8 +16,11 @@
  * Re-fit: scripts/training/vilna-harness.ts --tune em=…,lead=…,com=… --json
  */
 export const VILNA_FIT = {
-  /** Text-block width ÷ Gemara size. */
-  textBlockEm: 48,
+  /** Page text width ÷ Gemara size. Re-fitted (55, was 48) once the
+   *  Gemara + Rashi + Tosafot block took the print's 66% of the page
+   *  (VILNA_PRINT below): one amud per page again, a narrow Gemara line
+   *  about 7 words (the print: 6–7). */
+  textBlockEm: 55,
   /** Commentary (Rashi, Tosafot) size ÷ Gemara size. */
   commentaryToGemara: 0.82,
   /** Line spacing of the Gemara and the commentaries. */
@@ -29,3 +32,24 @@ export function vilnaSizesFor(contentWidthPt: number): { gemaraPt: number; comme
   const gemaraPt = Math.round((contentWidthPt / VILNA_FIT.textBlockEm) * 10) / 10;
   return { gemaraPt, commentaryPt: Math.round(gemaraPt * VILNA_FIT.commentaryToGemara * 10) / 10 };
 }
+
+/**
+ * The Vilna page's HORIZONTAL proportions, measured on the user's
+ * reference pages (Berakhot 2a–4a, Moznaim re-set of the Vilna; the text
+ * positions read from the PDFs' own text layer, not from images):
+ *  - main block (Gemara + Rashi + Tosafot) 419pt on a 635pt page, centred
+ *    (the side space holds the margin columns: Ein Mishpat, Masoret
+ *    HaShas, Torah Or, Gilyon — 63pt wide, 8.5pt from the block);
+ *  - in the block: Gemara 170pt (narrow), Rashi / Tosafot 110pt each,
+ *    gutters 14.2pt — 40.6% / 26.3% / 3.4%;
+ *  - a narrow Gemara line holds 6–7 words, a commentary line about 5.
+ * Ratios, so they hold for any page size.
+ */
+export const VILNA_PRINT = {
+  blockOfPageWidth: 419 / 635,
+  gemaraOfBlock: 170 / 419,
+  flankOfBlock: 110 / 419,
+  gutterOfBlock: 14.2 / 419,
+  marginalWidthOfPage: 63 / 635,
+  marginalGapOfPage: 8.5 / 635,
+} as const;

@@ -142,6 +142,8 @@ export interface VilnaHeaderOptions {
   pageSide: 'left' | 'right';
   fontFamily: string;
   fontSizePt: number;
+  /** Talmud: the head sits over the Gemara + Rashi + Tosafot block, this far in from each side of the text area. */
+  blockInsetPt?: number;
 }
 
 function measure(shaper: HarfBuzzShaperEngine, text: string, bold: boolean): number {
@@ -158,7 +160,7 @@ export function layoutVilnaHeader(page: PageTypesetResult, perek: PerekInfo | un
   const perekNumber =
     (opts.perekNumberOverride ?? '').trim() || (perek ? perekOrdinalHe(perek.number) : '');
   const parts = [perekName, perekNumber ? `פרק ${perekNumber}` : '', opts.masechet];
-  const geom = layoutHeaderParts(page, parts, opts.folioText, opts.pageSide, opts.fontFamily, opts.fontSizePt);
+  const geom = layoutHeaderParts(page, parts, opts.folioText, opts.pageSide, opts.fontFamily, opts.fontSizePt, opts.blockInsetPt ?? 0);
   return { ...geom, perekNumber: perek?.number, perekName, masechet: opts.masechet };
 }
 
@@ -174,11 +176,12 @@ export function layoutHeaderParts(
   folioText: string,
   pageSide: 'left' | 'right',
   fontFamily: string,
-  fontSizePt: number
+  fontSizePt: number,
+  blockInsetPt = 0
 ): VilnaHeaderGeom {
   const g = page.geometry;
-  const left = textBlockLeft(g);
-  const right = textBlockRight(g);
+  const left = textBlockLeft(g) + blockInsetPt;
+  const right = textBlockRight(g) - blockInsetPt;
   const size = fontSizePt;
   // Baseline sits just above the text block; never closer to the paper
   // edge than one line of the head itself.

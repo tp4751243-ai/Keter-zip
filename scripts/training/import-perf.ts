@@ -214,6 +214,9 @@ async function main() {
       const fills = [...by].filter(([, v]) => v.length === 1).map(([, v]) => v[0]).sort((a, b) => a - b);
       console.log('AMUD single-page fill p10/median/p90', fills[Math.floor(fills.length * 0.1)], fills[Math.floor(fills.length / 2)], fills[Math.floor(fills.length * 0.9)]);
     }
+    if (process.env.HEAD_GEOM) {
+      for (const pg of body.slice(0, 2)) console.log('HEAD', pg.amudKey, JSON.stringify(pg.geometry), JSON.stringify(pg.vilnaHeader?.items.map(i => [i.kind, Math.round(i.xLeft), Math.round(i.xRight)])));
+    }
     if (process.env.LINE_DUMP) {
       const plan = PdfExporter.buildPageRenderPlan(body[Number(process.env.LINE_DUMP)]);
       for (const l of [...plan.lines].sort((a, b) => a.yBaseline - b.yBaseline)) {
