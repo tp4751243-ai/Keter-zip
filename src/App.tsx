@@ -319,9 +319,9 @@ export default function App() {
 
   // 3. Viewport & Display Settings — Default 1.15x (115%) comfortable reading scale on desktop
   const [zoom, setZoom] = useState<number>(1.15);
-  const [showBaselines, setShowBaselines] = useState<boolean>(true);
+  const [showBaselines, setShowBaselines] = useState<boolean>(false);
   const [showAnchors, setShowAnchors] = useState<boolean>(false);
-  const [showKneeGuide, setShowKneeGuide] = useState<boolean>(true);
+  const [showKneeGuide, setShowKneeGuide] = useState<boolean>(false);
   // v0.9.8 Uniformity Audit — REMOVED: `showLinks` (default true) was
   // dead state: PageCanvas accepted the prop but never read it, and no
   // UI ever toggled it. Rav-text link display is the Phase 5

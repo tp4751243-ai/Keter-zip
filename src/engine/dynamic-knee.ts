@@ -33,6 +33,7 @@ import {
 import { ProfessionalDesignSettings } from '../types/design-settings';
 import { DesignSettingsEngine } from './design-settings-engine';
 import { applyGlyphStretch } from './line-breaker';
+import { isTalmudFolio } from './sefer-type';
 
 export interface RavTextLayoutInput {
   sourceText: string;
@@ -395,6 +396,13 @@ export class DynamicKneeEngine {
     consumedRashiWords: number;
     consumedTosafotWords: number;
   } {
+    // Vilna Shas page shape (the user's reference pages): the Gemara
+    // column only ever WIDENS going down the page — never a contracting
+    // knee; Rashi and Tosafot meet at the page centre above the Gemara;
+    // below it, the commentary with more text left spreads under the
+    // Gemara while the other keeps its own column.
+    const vilnaShape = isTalmudFolio(input.designSettings, 'rav_text');
+    if (vilnaShape && candidate.stepLowerRatio < 1) candidate = { ...candidate, stepLowerRatio: 1 };
     const {
       sourceText,
       rashiText,
@@ -596,7 +604,9 @@ export class DynamicKneeEngine {
     //   with total capacity > 1 flanking line retains at least 1 real flanking line alongside the Source!
     const usableDualTopW = contentWidth - gutter;
     const topShareR =
-      hasRashi && hasTosafot
+      hasRashi && hasTosafot && vilnaShape
+        ? 0.5
+        : hasRashi && hasTosafot
         ? Math.min(0.62, Math.max(0.38, rAdvanceSum / Math.max(1, rAdvanceSum + tAdvanceSum)))
         : hasRashi
         ? 1.0
@@ -789,6 +799,47 @@ export class DynamicKneeEngine {
     let curRashiY = commentAscent;
     let curTosafotY = commentAscent;
     let lineCounter = 0;
+    // Vilna: below / beside the end of the Gemara, the commentary with
+    // less text left keeps its own column width, and the one with more
+    // text spreads under the Gemara (never the other way round, and
+    // never whichever commentary happens to set its line first).
+    const vilnaFlankW = (side: 'r' | 't'): number => {
+      const ls = side === 'r' ? rashiLines : tosafotLines;
+      for (let q = ls.length - 1; q >= 0; q--) {
+        const l = ls[q];
+        if (l.zoneType === 'flanking_source' && l.xLeft !== undefined && l.xRight !== undefined) return l.xRight - l.xLeft;
+      }
+      return Math.max(minCommentW, side === 'r' ? defaultRashiWidth : defaultTosafotWidth);
+    };
+    const vilnaClampIv = <T extends { xLeft: number; xRight: number; width: number }>(side: 'r' | 't', iv: T | undefined): T | undefined => {
+      if (!vilnaShape || !iv) return iv;
+      // While the Gemara continues, each commentary stays in its own
+      // column beside it — it never cuts into the Gemara's space.
+      if (sIdx < structuredSourceWords.length && structuredSourceWords.length > 0) {
+        // its own column at the page's outer edge — or no line at this height
+        const w = vilnaFlankW(side);
+        const colL = side === 'r' ? contentWidth - w : 0;
+        const colR = side === 'r' ? contentWidth : w;
+        if (iv.xLeft > colL + 1 || iv.xRight < colR - 1) return undefined;
+        return { ...iv, xLeft: colL, xRight: colR, width: colR - colL };
+      }
+      const remRWords = structuredRashiWords.length - rIdx;
+      const remTWords = structuredTosafotWords.length - tIdx;
+      if (remRWords <= 0 || remTWords <= 0) return iv;
+      const shorter: 'r' | 't' = remRWords < remTWords ? 'r' : 't';
+      let { xLeft, xRight } = iv;
+      if (side === shorter) {
+        const w = vilnaFlankW(side);
+        if (side === 'r') xLeft = Math.max(xLeft, xRight - w);
+        else xRight = Math.min(xRight, xLeft + w);
+      } else {
+        const other = vilnaFlankW(shorter);
+        if (side === 'r') xLeft = Math.max(xLeft, other + gutter);
+        else xRight = Math.min(xRight, contentWidth - other - gutter);
+      }
+      if (xRight - xLeft < minCommentW - eps) return iv;
+      return { ...iv, xLeft, xRight, width: xRight - xLeft };
+    };
     const countTrailingLinesForUnit = (arr: TypesetLine[], uid?: string): number => {
       if (!uid) return 0;
       let c = 0;
@@ -973,7 +1024,23 @@ export class DynamicKneeEngine {
       const excessRashiLines = Math.max(0, totalTrialRashiLines - maxFlankCommentLines);
       const excessTosafotLines = Math.max(0, totalTrialTosafotLines - maxFlankCommentLines);
 
-      if (excessRashiLines > 0 && excessTosafotLines > 0) {
+      if (vilnaShape && (excessRashiLines > 0 || excessTosafotLines > 0)) {
+        // Vilna bottom: the shorter commentary continues in its own column
+        // (its flank width); the longer one spreads under the Gemara
+        // beside it, and over the full width once the shorter ends.
+        const fR = Math.max(minCommentW, defaultRashiWidth);
+        const fT = Math.max(minCommentW, defaultTosafotWidth);
+        const rLonger = excessRashiLines >= excessTosafotLines;
+        const shortEx = rLonger ? excessTosafotLines : excessRashiLines;
+        const longEx = rLonger ? excessRashiLines : excessTosafotLines;
+        const longFlank = rLonger ? fR : fT;
+        const shortFlank = rLonger ? fT : fR;
+        const wideW = Math.max(longFlank, contentWidth - gutter - shortFlank);
+        // long-commentary lines (in flank-width units) absorbed beside the short column
+        const absorbed = (shortEx * wideW) / longFlank;
+        const restFull = Math.max(0, longEx - absorbed) * (longFlank / contentWidth);
+        requiredCommentClearancePt = Math.ceil(shortEx + restFull) * commentLineHeight;
+      } else if (excessRashiLines > 0 && excessTosafotLines > 0) {
         const lowerSplitLines = Math.max(
           Math.ceil(excessRashiLines / 1.75),
           Math.ceil(excessTosafotLines / 1.75)
@@ -1062,7 +1129,7 @@ export class DynamicKneeEngine {
         const cTop = curRashiY - commentAscent;
         const cBottom = curRashiY + commentDescent;
         const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
-        const rightIv = freeIvs[freeIvs.length - 1];
+        const rightIv = vilnaClampIv('r', freeIvs[freeIvs.length - 1]);
 
         if (
           rightIv &&
@@ -1106,7 +1173,7 @@ export class DynamicKneeEngine {
         const cTop = curTosafotY - commentAscent;
         const cBottom = curTosafotY + commentDescent;
         const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
-        const leftIv = freeIvs[0];
+        const leftIv = vilnaClampIv('t', freeIvs[0]);
 
         if (
           leftIv &&
@@ -1205,8 +1272,29 @@ export class DynamicKneeEngine {
       // Verified commentary clearance constraint:
       // If remaining commentary lines require lower wrap space beneath Gemara,
       // terminate Source when available vertical space below equals required lower commentary clearance!
-      const dynamicLowerLines =
-        remRashiLinesHere > 0 && remTosafotLinesHere > 0
+      const vilnaLowerLines = (): number => {
+        // Commentary lines that still fit BESIDE the rest of the Gemara
+        // need no room below it; the rest wraps below in the Vilna shape
+        // (shorter commentary in its column, longer one spread).
+        const beside = Math.floor(remSourceHeightPt / commentLineHeight);
+        const exR = Math.max(0, remRashiLinesHere - beside);
+        const exT = Math.max(0, remTosafotLinesHere - beside);
+        if (exR === 0 && exT === 0) return 0;
+        const fR = Math.max(minCommentW, defaultRashiWidth);
+        const fT = Math.max(minCommentW, defaultTosafotWidth);
+        const rLonger = exR >= exT;
+        const shortEx = rLonger ? exT : exR;
+        const longEx = rLonger ? exR : exT;
+        const longFlank = rLonger ? fR : fT;
+        const shortFlank = rLonger ? fT : fR;
+        const wideW = Math.max(longFlank, contentWidth - gutter - shortFlank);
+        const absorbed = (shortEx * wideW) / longFlank;
+        const restFull = Math.max(0, longEx - absorbed) * (longFlank / contentWidth);
+        return Math.ceil(shortEx + restFull);
+      };
+      const dynamicLowerLines = vilnaShape
+        ? vilnaLowerLines()
+        : remRashiLinesHere > 0 && remTosafotLinesHere > 0
           ? Math.max(Math.ceil(remRashiLinesHere / 1.75), Math.ceil(remTosafotLinesHere / 1.75))
           : remRashiLinesHere > 0
           ? Math.ceil(remRashiLinesHere / 2.4)
@@ -1437,6 +1525,11 @@ export class DynamicKneeEngine {
         }
       }
 
+      if (vilnaShape && prevSourceLine) {
+        // never narrower than the Gemara line above
+        sLeft = Math.min(sLeft, prevSLeft);
+        sRight = Math.max(sRight, prevSRight);
+      }
       // Also intersect `[sLeft, sRight]` with `spatial.queryAvailableIntervals(sBandTop, sBandBottom, gutter, 1.5)`
       // so the Source line is mathematically guaranteed never to collide with any already-registered commentary line!
       const availForSource = spatial.queryAvailableIntervals(sBandTop, sBandBottom, gutter, 1.5);
@@ -1508,7 +1601,7 @@ export class DynamicKneeEngine {
           break;
         }
         const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
-        const rightIv = freeIvs[freeIvs.length - 1];
+        const rightIv = vilnaClampIv('r', freeIvs[freeIvs.length - 1]);
         if (
           rightIv &&
           rightIv.xRight > contentWidth * 0.52 &&
@@ -1553,7 +1646,7 @@ export class DynamicKneeEngine {
           break;
         }
         const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
-        const leftIv = freeIvs[0];
+        const leftIv = vilnaClampIv('t', freeIvs[0]);
         if (
           leftIv &&
           leftIv.xLeft < contentWidth * 0.48 &&
@@ -1636,8 +1729,26 @@ export class DynamicKneeEngine {
           const remT = structuredTosafotWords.slice(tIdx).reduce((s, w) => s + w.width + 3.5, 0);
           const lowerShareR = Math.min(0.62, Math.max(0.38, remR / Math.max(1, remR + remT)));
           const usableLowerW = fullIv.width - gutter;
-          const rSplitW = Math.max(minCommentW, Math.round(usableLowerW * lowerShareR));
-          const tSplitW = Math.max(minCommentW, usableLowerW - rSplitW);
+          let rSplitW = Math.max(minCommentW, Math.round(usableLowerW * lowerShareR));
+          let tSplitW = Math.max(minCommentW, usableLowerW - rSplitW);
+          if (vilnaShape) {
+            // The longer commentary wraps under the Gemara; the shorter
+            // continues straight down in its own column (the width it had
+            // beside the Gemara).
+            if (structuredRashiWords.length - rIdx >= structuredTosafotWords.length - tIdx) {
+              const w = vilnaFlankW('t');
+              if (w > 0) {
+                tSplitW = Math.max(minCommentW, w);
+                rSplitW = Math.max(minCommentW, usableLowerW - tSplitW);
+              }
+            } else {
+              const w = vilnaFlankW('r');
+              if (w > 0) {
+                rSplitW = Math.max(minCommentW, w);
+                tSplitW = Math.max(minCommentW, usableLowerW - rSplitW);
+              }
+            }
+          }
 
           if (stepR) {
             const rRight = fullIv.xRight;
@@ -1781,8 +1892,8 @@ export class DynamicKneeEngine {
         }
       } else {
         // Case B: Flanking intervals alongside the lower lines of the Source or sibling lower split column
-        const rightIv = freeIntervals[freeIntervals.length - 1];
-        const leftIv = freeIntervals[0];
+        const rightIv = vilnaClampIv('r', freeIntervals[freeIntervals.length - 1]);
+        const leftIv = vilnaClampIv('t', freeIntervals[0]);
         let placedRight = false;
 
         if (

@@ -861,6 +861,8 @@ export interface PageTypesetResult {
   runningChapter?: string;
   /** Layout training T12 — a Mikraot Gedolot introduction page (commentary הקדמה, no pesukim). */
   chumashIntro?: boolean;
+  /** Talmud: the amud this page sets ("ב.", "ב:"), from the import's דף headings — one amud per page. */
+  amudKey?: string;
   /**
    * Layout training T2.2 — set on the page where the knee solver reserved
    * the opening frame's space at the top of the Gemara column; the frame

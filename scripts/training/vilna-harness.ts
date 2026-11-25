@@ -506,6 +506,37 @@ function scorePage(
     detail: `${tight} line pairs closer than 6pt${tightEx.length ? ` (e.g. ${tightEx.join('; ')})` : ''}`,
   });
 
+  // K1 — the Gemara only widens going down the page (never a contracting
+  // knee), and K2 — above the Gemara, Rashi and Tosafot meet at the
+  // centre of the page (the user's Vilna reference pages).
+  {
+    const src = page.sourceLines.filter(l => l.role === 'main_source' && l.xLeft !== undefined && l.xRight !== undefined).sort((a, b2) => a.yBaseline - b2.yBaseline);
+    let narrows = 0;
+    for (let q = 1; q < src.length; q++) {
+      if (src[q].xLeft! > src[q - 1].xLeft! + 1.5 || src[q].xRight! < src[q - 1].xRight! - 1.5) narrows++;
+    }
+    out.push({
+      id: 'K1',
+      label: 'Gemara never narrows going down the page',
+      status: src.length < 2 ? 'info' : narrows === 0 ? 'pass' : 'fail',
+      detail: `${narrows} Gemara lines narrower than the line above`,
+    });
+    const firstSrcY = src.length ? src[0].yBaseline : Infinity;
+    const topR = page.rashiLines.filter(l => l.yBaseline < firstSrcY - 4 && l.xLeft !== undefined);
+    const topT = page.tosafotLines.filter(l => l.yBaseline < firstSrcY - 4 && l.xRight !== undefined);
+    if (topR.length && topT.length) {
+      const cw = g.pageWidth - g.marginInside - g.marginOutside;
+      const split = (Math.min(...topR.map(l => l.xLeft!)) + Math.max(...topT.map(l => l.xRight!))) / 2;
+      const off = Math.abs(split - cw / 2);
+      out.push({
+        id: 'K2',
+        label: 'Rashi | Tosafot split above the Gemara at the page centre',
+        status: off <= 3 ? 'pass' : 'fail',
+        detail: `split ${off.toFixed(1)}pt from the centre`,
+      });
+    }
+  }
+
   // A1 — amud alignment (info): which Vilna amudim this page's Gemara came from.
   const amudim = new Map<string, number>();
   for (const l of plan.lines.filter(x => isSource(x.role))) {

@@ -14,6 +14,8 @@
  * 4. Two-Column Vertical Balancing & Multi-Page Distribution (Problem 9).
  */
 
+import { dafHeadingKey } from './chumash-linker';
+import { parseHebrewNumeral } from './hebrew-numerals';
 import {
   BookLayoutType,
   BookTypesetDocument,
@@ -144,6 +146,63 @@ export interface PaginationInput {
   designSettings?: ProfessionalDesignSettings;
 }
 
+/**
+ * Talmud — one amud per page. The import's amud headings ("דף ב." /
+ * "דף ב:") in the Gemara file, and in each commentary file, divide the
+ * book into amudim; each amud is laid out on its own page(s), so every
+ * new amud starts a new page with its own Rashi and Tosafot (as in the
+ * Vilna). The heading paragraphs themselves are not printed: the amud
+ * is shown in the running head. Returns null when the Gemara has fewer
+ * than two amud headings (the book then flows as one stream).
+ */
+export function splitTalmudIntoAmudim(units: ContentUnit[]): Array<{ key: string; units: ContentUnit[] }> | null {
+  const streamKey = (u: ContentUnit) => (u.importFileIndex !== undefined ? `f${u.importFileIndex}` : `r${u.role}`);
+  const firstGemara = units.find(u => u.role === 'main_source');
+  if (!firstGemara) return null;
+  const gemaraStream = streamKey(firstGemara);
+  // amudim in the order of the Gemara's own headings
+  const mainKeys: string[] = [];
+  for (const u of units) {
+    if (u.importFileIndex !== undefined ? streamKey(u) !== gemaraStream : u.role !== 'heading' && u.role !== 'chapter' && u.role !== 'main_source') continue;
+    const k = dafHeadingKey(u.rawText ?? '');
+    if (k && !mainKeys.includes(k)) mainKeys.push(k);
+  }
+  if (mainKeys.length < 2) return null;
+  const groups = new Map<string, ContentUnit[]>(mainKeys.map(k => [k, []]));
+  const current = new Map<string, string>();
+  const isTitle = (u: ContentUnit) => u.role === 'heading' || u.role === 'chapter' || u.role === 'main_title';
+  for (const u of units) {
+    const sk = streamKey(u);
+    const k = dafHeadingKey(u.rawText ?? '');
+    if (k) {
+      // an amud the Gemara does not have stays with the amud before it
+      current.set(sk, groups.has(k) ? k : current.get(sk) ?? mainKeys[0]);
+      continue; // the heading itself is not printed
+    }
+    const key = current.get(sk);
+    if (!key) {
+      // Before a file's first amud: its title block ("ברכות", "רש״י על
+      // ברכות", a "רש״י" label) — the Vilna prints the masechta in the
+      // running head only. Untitled text before the first heading stays.
+      if (isTitle(u) || (u.importFileIndex !== undefined && sk !== gemaraStream && u.role !== 'main_source' && (u.rawText ?? '').trim().split(/\s+/).length <= 3)) continue;
+      groups.get(mainKeys[0])!.push(u);
+      continue;
+    }
+    groups.get(key)!.push(u);
+  }
+  return mainKeys.map(key => ({ key, units: groups.get(key)! })).filter(g => g.units.length > 0);
+}
+
+/** Body page index of an amud key (ב. → 0 with the default start at daf ב amud א). */
+export function bodyIndexOfAmud(key: string, startDaf = 2, startAmud: 'a' | 'b' = 'a'): number | null {
+  const m = /^(.+?)([.:])$/.exec(key);
+  if (!m) return null;
+  const daf = parseHebrewNumeral(m[1]);
+  if (!daf) return null;
+  const idx = (daf - startDaf) * 2 + (m[2] === ':' ? 1 : 0) - (startAmud === 'b' ? 1 : 0);
+  return idx >= 0 ? idx : null;
+}
+
 export class PaginationEngine {
   /**
    * v0.8.0 Part C (§1): roles that flow in the rav-text SOURCE stream.
@@ -269,6 +328,7 @@ export class PaginationEngine {
     const units: ContentUnit[] = openingExtract?.units ?? rawUnits ?? [];
 
     const designSettings = input.designSettings;
+    const talmudFolioEarly = isTalmudFolio(designSettings, layoutType);
     const effectiveSourceFontSize =
       designSettings?.roleStyles?.main_source?.character?.fontSizePt ?? sourceFontSize;
     const effectiveCommentaryFontSize =
@@ -416,7 +476,40 @@ export class PaginationEngine {
         });
         break;
       case 'rav_text':
-      default:
+      default: {
+        const amudim = talmudFolioEarly ? splitTalmudIntoAmudim(units) : null;
+        if (amudim) {
+          const pages: PageTypesetResult[] = [];
+          let first: BookTypesetDocument | null = null;
+          amudim.forEach((g, gi) => {
+            const ids = new Set(g.units.map(u => u.id));
+            const part = this.paginateRavText(
+              title,
+              layoutType,
+              g.units,
+              geometry,
+              contentWidth,
+              contentHeight,
+              effectiveSourceFontSize,
+              effectiveCommentaryFontSize,
+              kneeSettings,
+              enableOrnaments,
+              effectiveRavLinks?.filter(l => ids.has(l.sourceUnitId) && ids.has(l.commentaryUnitId)),
+              gi === 0 ? userSuppliedOrnaments : [],
+              userOrnamentRules,
+              rulesConfig,
+              designSettings,
+              gi === 0,
+              pages.length,
+              true
+            );
+            for (const pg of part.pages) pg.amudKey = g.key;
+            pages.push(...part.pages);
+            if (!first) first = part;
+          });
+          doc = { ...first!, pages, totalPages: pages.length };
+          break;
+        }
         doc = this.paginateRavText(
           title,
           layoutType,
@@ -435,6 +528,7 @@ export class PaginationEngine {
           designSettings
         );
         break;
+      }
     }
 
     doc.sourceFontFamily = effectiveSourceFontFamily;
@@ -764,7 +858,10 @@ export class PaginationEngine {
           isVerso: bIdx % 2 === 1,
           textLeftPt: mirrorOn && bIdx % 2 === 0 ? pg.geometry.marginOutside : pg.geometry.marginInside,
         };
-        const folioInfo = formatBodyFolioLabel(bIdx, layoutType, designSettings?.pageElements, talmudFolio);
+        // One amud per page: the folio is the amud's own (from its דף heading).
+        const fnCfg = designSettings?.pageElements?.folioNumbering;
+        const amudIdx = pg.amudKey && talmudFolio ? bodyIndexOfAmud(pg.amudKey, fnCfg?.startDaf ?? 2, fnCfg?.startAmud ?? 'a') : null;
+        const folioInfo = formatBodyFolioLabel(amudIdx ?? bIdx, layoutType, designSettings?.pageElements, talmudFolio);
         pg.folioDisplay = folioInfo.folioDisplay;
         pg.pageNumberHebrew = folioInfo.folioDisplay;
         const spreadSide = spreadSideForPageIndex(bIdx);
@@ -3958,7 +4055,13 @@ export class PaginationEngine {
     userSuppliedOrnaments: OrnamentAsset[] = [],
     userOrnamentRules: OrnamentUserRule[] = [],
     rulesConfig?: TypesettingRulesConfig,
-    designSettings?: ProfessionalDesignSettings
+    designSettings?: ProfessionalDesignSettings,
+    /** false for a later amud: the masechta's opening frame is on the first page only. */
+    openingOnFirstPage: boolean = true,
+    /** pages laid out before this call (one amud per page): keeps recto/verso mirroring right. */
+    pageParityOffset: number = 0,
+    /** one amud: fill the page with the whole amud; carry over only what does not fit. */
+    packWholeAmud: boolean = false
   ): BookTypesetDocument {
     const footnoteUnits = units.filter(u => u.role === 'footnote');
 
@@ -4230,7 +4333,7 @@ export class PaginationEngine {
       };
       const openingFrameOn = ravTalmud && layoutType === 'rav_text' && openingCfgRav.enabled && openingCfgRav.styleId !== 'none';
       const openingFrame = openingFrameOn ? openingFrameGeometry(sourceFontSize) : null;
-      const openingReserveFor = (pageIdx: number): number => (pageIdx === 0 && openingFrame ? openingFrame.reservePt : 0);
+      const openingReserveFor = (pageIdx: number): number => (pageIdx === 0 && openingOnFirstPage && openingFrame ? openingFrame.reservePt : 0);
       const michtavEnabled = ravTalmud && designSettings?.ravText?.michtavEnabled === true && !openingFrameOn;
 
       let sCursor = 0;
@@ -4388,7 +4491,7 @@ export class PaginationEngine {
             upperKneeLines: kneeSettings.upperKneeLines ?? 4,
             upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
             forceSteppedKnee: true,
-            mirrorFlanks: p % 2 === 1,
+            mirrorFlanks: (p + pageParityOffset) % 2 === 1,
             isMultiPageContinuation: true,
             rulesConfig,
             designSettings,
@@ -4440,7 +4543,7 @@ export class PaginationEngine {
                 upperKneeLines: kneeSettings.upperKneeLines ?? 4,
                 upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
                 forceSteppedKnee: true,
-                mirrorFlanks: p % 2 === 1,
+                mirrorFlanks: (p + pageParityOffset) % 2 === 1,
                 isMultiPageContinuation: true,
                 rulesConfig,
                 designSettings,
@@ -4683,7 +4786,7 @@ export class PaginationEngine {
             upperKneeLines: kneeSettings.upperKneeLines ?? 4,
             upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
             forceSteppedKnee: true,
-            mirrorFlanks: p % 2 === 1,
+            mirrorFlanks: (p + pageParityOffset) % 2 === 1,
             manualJunctionPercent: kneeSettings.mode === 'manual' ? kneeSettings.junctionPercent : undefined,
             manualLowerWidthPercent: kneeSettings.mode === 'manual' ? kneeSettings.lowerWidthPercent : undefined,
             manualStepDirection: kneeSettings.mode === 'manual' ? kneeSettings.stepDirection : 'auto',
@@ -4797,6 +4900,13 @@ export class PaginationEngine {
         }
       }
 
+      if (packWholeAmud) {
+        // One amud: the page takes the whole amud — the knee sets what
+        // fits and only the true remainder carries over.
+        sTarget = sourceShapedAll.length - sCursor;
+        rTarget = rashiShapedAll.length - rCursor;
+        tTarget = tosafotShapedAll.length - tCursor;
+      }
       const prevSCursor = sCursor;
       const prevRCursor = rCursor;
       const prevTCursor = tCursor;
@@ -4828,7 +4938,7 @@ export class PaginationEngine {
         upperKneeLines: kneeSettings.upperKneeLines ?? 4,
         upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
         forceSteppedKnee: true,
-        mirrorFlanks: p % 2 === 1,
+        mirrorFlanks: (p + pageParityOffset) % 2 === 1,
         manualJunctionPercent:
           kneeSettings.mode === 'manual' ? kneeSettings.junctionPercent : undefined,
         manualLowerWidthPercent:
@@ -5066,7 +5176,7 @@ export class PaginationEngine {
           upperKneeLines: kneeSettings.upperKneeLines ?? 4,
           upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
           forceSteppedKnee: true,
-          mirrorFlanks: p % 2 === 1,
+          mirrorFlanks: (p + pageParityOffset) % 2 === 1,
           manualJunctionPercent:
             kneeSettings.mode === 'manual' ? kneeSettings.junctionPercent : undefined,
           manualLowerWidthPercent:
@@ -5162,7 +5272,7 @@ export class PaginationEngine {
           upperKneeLines: kneeSettings.upperKneeLines ?? 4,
           upperKneeInwardStep: kneeSettings.upperKneeInwardStep ?? 18,
           forceSteppedKnee: true,
-          mirrorFlanks: p % 2 === 1,
+          mirrorFlanks: (p + pageParityOffset) % 2 === 1,
           manualJunctionPercent:
             kneeSettings.mode === 'manual' ? kneeSettings.junctionPercent : undefined,
           manualLowerWidthPercent:
@@ -5335,7 +5445,7 @@ export class PaginationEngine {
             : sCursor > 0
               ? (sourceOrderIdx.get(sourceShapedAll[sCursor - 1]?.unitId ?? '') ?? -1)
               : -1;
-        const innerOnRight = p % 2 === 0;
+        const innerOnRight = (p + pageParityOffset) % 2 === 0;
         const w = marginGeom.widthPt;
         const right: [number, number] = [fullContentWidth - w, fullContentWidth];
         const left: [number, number] = [0, w];

@@ -3320,10 +3320,12 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                         : 'ring-1 ring-dashed ring-[#344A67]/50 bg-[#344A67]/[0.025]'
                     }`}
                   />
-                  <span className="absolute -top-5 right-0 whitespace-nowrap rounded bg-[#344A67] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                    {role ? getSemanticRoleLabel(role, lang) : t('פסקה')} · {lineCount}{' '}
-                    {t('שורות')}
-                  </span>
+                  {kind === 'selected' && (
+                    <span className="absolute -top-5 right-0 whitespace-nowrap rounded bg-[#344A67] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                      {role ? getSemanticRoleLabel(role, lang) : t('פסקה')} · {lineCount}{' '}
+                      {t('שורות')}
+                    </span>
+                  )}
                 </div>
               ))}
 
@@ -3396,6 +3398,9 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                 Array.from(pageLinesByUnit.entries()).map(([unitId, unitLines]) => {
                   const lastLine = unitLines[unitLines.length - 1];
                   if (!lastLine) return null;
+                  // A clean page: the split handle belongs to the selected
+                  // paragraph only (not to every block under the mouse).
+                  if (unitId !== selectedUnitId && splitDrag?.unitId !== unitId) return null;
                   const handleTopPx = (lastLine.yBaseline + lastLine.descent) * scale;
                   const isActiveDrag = splitDrag?.unitId === unitId;
                   return (

@@ -81,6 +81,7 @@ async function main() {
     });
     all.splice(0, all.length, ...kept);
   }
+  if (process.env.HEAD_DUMP) for (const f of new Set(all.map(u => u.importFileIndex))) console.log("FILE", f, JSON.stringify(all.filter(u => u.importFileIndex === f).slice(0, 4).map(u => [u.role, u.rawText.slice(0, 30)])));
   const sources = all.filter(u => u.role === 'main_source' || u.role === 'chapter');
   const comms = all.filter(u => u.role === 'primary_comment' || u.role === 'secondary_comment' || u.role === 'tertiary_comment');
   console.log(`units ${all.length}: sources ${sources.length}, commentaries ${comms.length}`);
@@ -189,6 +190,29 @@ async function main() {
     }
     if (process.env.SRC_DUMP) {
       for (const l of body[Number(process.env.SRC_DUMP)].sourceLines.slice(3, 9)) console.log([...new Set(l.words.filter(w => !w.isSpace).map(w => w.unitId))].join(" "), l.unitBoundaryAfter, `SRC just=${l.isJustified} last=${l.isLastLine} w=${l.width.toFixed(1)} tw=${l.targetWidth.toFixed(1)} ex=${l.extraSpacePerWord.toFixed(2)} al=${(l as any).paragraphAlignment} hang=${(l as any).hangingIndentPt} words=${l.words.filter(w => !w.isSpace).length} sum=${l.words.reduce((a, w) => a + w.width, 0).toFixed(1)}`);
+    }
+    if (process.env.ZONE_DUMP) {
+      const pg = body[Number(process.env.ZONE_DUMP)];
+      for (const [n, ls] of [['R', pg.rashiLines], ['T', pg.tosafotLines], ['S', pg.sourceLines]] as const) {
+        const z = new Map<string, string>();
+        for (const l of ls) { const k = `${l.zoneType}`; z.set(k, (z.get(k) ? z.get(k) + ' ' : '') + `${Math.round(l.yBaseline)}:${Math.round(l.xLeft ?? -1)}-${Math.round(l.xRight ?? -1)}`); }
+        for (const [k, v] of z) console.log('ZONE', n, k, v.split(' ').slice(-6).join(' '));
+      }
+    }
+    if (process.env.AMUD_DUMP) {
+      const by = new Map<string, number[]>();
+      for (const pg of body) {
+        const all = [...pg.sourceLines, ...pg.rashiLines, ...pg.tosafotLines];
+        const bottom = all.length ? Math.max(...all.map(l => l.yBaseline)) : 0;
+        const ch = pg.geometry.pageHeight - pg.geometry.marginTop - pg.geometry.marginBottom;
+        const k = pg.amudKey ?? '?';
+        by.set(k, [...(by.get(k) ?? []), Math.round((bottom / ch) * 100)]);
+      }
+      const over = [...by].filter(([, v]) => v.length > 1);
+      for (const pg of body.filter(q => q.amudKey === process.env.AMUD_DUMP)) console.log('AMUDPG', pg.amudKey, 'S', pg.sourceLines.length, 'R', pg.rashiLines.length, 'T', pg.tosafotLines.length, 'ter', pg.tertiaryLines?.length ?? 0, 'fn', pg.footnoteLines.length, 'margin', (pg as any).marginLines?.length ?? 0, 'mb', pg.geometry.marginBottom);
+      console.log('AMUD pages', by.size, 'amudim;', over.length, 'spill:', over.map(([k, v]) => `${k}=${v.join('/')}%`).join(' '));
+      const fills = [...by].filter(([, v]) => v.length === 1).map(([, v]) => v[0]).sort((a, b) => a - b);
+      console.log('AMUD single-page fill p10/median/p90', fills[Math.floor(fills.length * 0.1)], fills[Math.floor(fills.length / 2)], fills[Math.floor(fills.length * 0.9)]);
     }
     if (process.env.LINE_DUMP) {
       const plan = PdfExporter.buildPageRenderPlan(body[Number(process.env.LINE_DUMP)]);
