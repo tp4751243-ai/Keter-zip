@@ -493,6 +493,13 @@ export class DynamicKneeEngine {
     const sourceDescent = sourceEngine.getShaper().getDescent();
     const commentAscent = commentEngine.getShaper().getAscent();
     const commentDescent = commentEngine.getShaper().getDescent();
+    // A line one pitch below the line above it in the same column must
+    // never read as a collision, even when the line pitch is tighter than
+    // the font's full glyph box (compact candidates, Rashi script): the
+    // vertical clearance of a query is capped at pitch − glyph box. Before,
+    // such columns skipped every other line (gaps between dibburim).
+    const commentClear = Math.min(1.5, commentLineHeight - (commentAscent + commentDescent) + 0.4);
+    const sourceClear = Math.min(1.5, sourceLineHeight - (sourceAscent + sourceDescent) + 0.4);
 
     // Build or use structured ShapedWord[] preserving ContentUnit identity, TextRuns, and Dibbur HaMatchil
     const structuredSourceWords: ShapedWord[] =
@@ -1139,7 +1146,7 @@ export class DynamicKneeEngine {
       ) {
         const cTop = curRashiY - commentAscent;
         const cBottom = curRashiY + commentDescent;
-        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
+        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, commentClear);
         const rightIv = vilnaClampIv('r', freeIvs[freeIvs.length - 1]);
 
         if (
@@ -1183,7 +1190,7 @@ export class DynamicKneeEngine {
       ) {
         const cTop = curTosafotY - commentAscent;
         const cBottom = curTosafotY + commentDescent;
-        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
+        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, commentClear);
         const leftIv = vilnaClampIv('t', freeIvs[0]);
 
         if (
@@ -1543,7 +1550,7 @@ export class DynamicKneeEngine {
       }
       // Also intersect `[sLeft, sRight]` with `spatial.queryAvailableIntervals(sBandTop, sBandBottom, gutter, 1.5)`
       // so the Source line is mathematically guaranteed never to collide with any already-registered commentary line!
-      const availForSource = spatial.queryAvailableIntervals(sBandTop, sBandBottom, gutter, 1.5);
+      const availForSource = spatial.queryAvailableIntervals(sBandTop, sBandBottom, gutter, sourceClear);
       const matchingSourceIv = availForSource.find(
         iv => Math.min(iv.xRight, sRight) - Math.max(iv.xLeft, sLeft) >= minSourceW - eps
       );
@@ -1611,7 +1618,7 @@ export class DynamicKneeEngine {
         if (!isFinalSourceLine && cBottom > nextSourceBandTop + 1.5) {
           break;
         }
-        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
+        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, commentClear);
         const rightIv = vilnaClampIv('r', freeIvs[freeIvs.length - 1]);
         if (
           rightIv &&
@@ -1656,7 +1663,7 @@ export class DynamicKneeEngine {
         if (!isFinalSourceLine && cBottom > nextSourceBandTop + 1.5) {
           break;
         }
-        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, 1.5);
+        const freeIvs = spatial.queryAvailableIntervals(cTop, cBottom, gutter, commentClear);
         const leftIv = vilnaClampIv('t', freeIvs[0]);
         if (
           leftIv &&
@@ -1722,7 +1729,7 @@ export class DynamicKneeEngine {
       const lineTop = targetY - commentAscent;
       const lineBottom = targetY + commentDescent;
 
-      const freeIntervals = spatial.queryAvailableIntervals(lineTop, lineBottom, gutter, 1.5);
+      const freeIntervals = spatial.queryAvailableIntervals(lineTop, lineBottom, gutter, commentClear);
       if (freeIntervals.length === 0) {
         if (stepR) curRashiY += commentLineHeight;
         if (stepT) curTosafotY += commentLineHeight;
@@ -2256,6 +2263,7 @@ export class DynamicKneeEngine {
     // where a line happens to end is therefore NOT the end of the block:
     // that line is justified like any other. Only the end of the stream,
     // a heading, or a forced break ends a block.
+    const runOnTalmud = isTalmudFolio(engine.getDesignSettings(), 'rav_text');
     const endsBlock =
       isLastOfStream ||
       endedUnitBoundary ||
@@ -2355,6 +2363,16 @@ export class DynamicKneeEngine {
         : designSettings.ravText?.paragraphSeparator?.styleId;
       const sepClearancePt = isLastOfUnit && activeSepStyle && activeSepStyle !== 'none' ? 6 : 0;
       spaceAfterPt = isLastOfUnit ? Math.max(resolved.paragraph.spaceAfterPt || 0, sepClearancePt) : 0;
+      if (runOnTalmud && !endsBlock) {
+        // Vilna: the divrei hamatchil run on — the next dibbur starts on
+        // the same line where the last one ended, with no space, no
+        // separator and no gap below the line (the dibbur's own colon is
+        // the only mark between them).
+        spaceAfterPt = 0;
+      }
+      if (runOnTalmud && isFirstLineOfUnit && startIndex > 0 && !isHeadingRole(words[startIndex - 1]?.role)) {
+        spaceBeforePt = 0;
+      }
       if (lineParagraphAlignment !== 'justify' && isJustified) {
         const naturalW = lineWords.reduce((acc, w) => acc + w.width, 0);
         currentWidth = naturalW;
@@ -2420,6 +2438,7 @@ export class DynamicKneeEngine {
         spaceBeforePt,
         spaceAfterPt,
         leadingPt: lineHeight,
+        ...(runOnTalmud && isBoundaryAfter && !endsBlock ? { separatorStyleIdOverride: 'none' as const } : {}),
       },
       nextWordIndex: idx,
     };

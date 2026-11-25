@@ -331,8 +331,11 @@ function scorePage(
       if (firstLineText.split(' ')[0] === norm(b.firstWord) || firstLineText.split(' ')[1] === norm(b.firstWord))
         problems.push('framed word is also printed at the start of the text');
       // centred on the Gemara column
-      const colL = Math.min(...srcLines.map(l => l.xLeft));
-      const colR = Math.max(...srcLines.map(l => l.xRight));
+      // (the column under the frame: the Gemara's first lines — it may
+      // widen further down once a commentary ends, by the Vilna rule)
+      const topSrc = srcLines.slice(0, 3);
+      const colL = Math.min(...topSrc.map(l => l.xLeft));
+      const colR = Math.max(...topSrc.map(l => l.xRight));
       const off = Math.abs((box.xLeft + box.xRight) / 2 - (colL + colR) / 2);
       if (off > 6) problems.push(`not centred on the Gemara column (off by ${off.toFixed(0)}pt)`);
       // nothing overlaps it
@@ -541,7 +544,10 @@ function scorePage(
   // Gemara column is 40.6% of the Gemara + Rashi + Tosafot block and a
   // narrow Gemara line holds about 6–7 words.
   {
-    const src = page.sourceLines.filter(l => l.role === 'main_source' && l.xLeft !== undefined && l.xRight !== undefined && !l.isLastLine);
+    // Gemara lines with BOTH commentaries beside them (one commentary
+    // alone lets the Gemara take the other side — that is the rule too).
+    const beside = (ls: typeof page.rashiLines, y: number) => ls.some(c => c.zoneType === 'flanking_source' && Math.abs(c.yBaseline - y) < 14);
+    const src = page.sourceLines.filter(l => l.role === 'main_source' && l.xLeft !== undefined && l.xRight !== undefined && !l.isLastLine && beside(page.rashiLines, l.yBaseline) && beside(page.tosafotLines, l.yBaseline));
     const all = [...page.sourceLines, ...page.rashiLines, ...page.tosafotLines].filter(l => l.xLeft !== undefined && l.xRight !== undefined);
     if (src.length >= 4 && all.length) {
       const blockW = Math.max(...all.map(l => l.xRight!)) - Math.min(...all.map(l => l.xLeft!));
@@ -557,6 +563,31 @@ function scorePage(
         detail: `Gemara ${(ratio * 100).toFixed(1)}% of the ${blockW.toFixed(0)}pt block, ${medWords} words a narrow line`,
       });
     }
+  }
+
+  // C1 — the divrei hamatchil run on: no extra space (or separator)
+  // between one dibbur and the next inside a Rashi / Tosafot column.
+  {
+    let gaps = 0;
+    let pairs = 0;
+    for (const ls of [page.rashiLines, page.tosafotLines]) {
+      const col = [...ls].filter(l => l.xLeft !== undefined).sort((a, b) => a.yBaseline - b.yBaseline);
+      for (let q = 1; q < col.length; q++) {
+        const a = col[q - 1], b2 = col[q];
+        if (Math.abs((a.xLeft ?? 0) - (b2.xLeft ?? 0)) > 1 && Math.abs((a.xRight ?? 0) - (b2.xRight ?? 0)) > 1) continue; // another column
+        const lh = a.leadingPt ?? a.height;
+        if (!lh) continue;
+        pairs++;
+        if (b2.yBaseline - a.yBaseline > lh * 1.25) gaps++;
+      }
+    }
+    const seps = [...page.rashiLines, ...page.tosafotLines].filter(l => l.unitBoundaryAfter && !l.isLastLine && l.separatorStyleIdOverride !== 'none' && (l.spaceAfterPt ?? 0) > 0).length;
+    out.push({
+      id: 'C1',
+      label: 'Divrei hamatchil run on (no gap or separator between them)',
+      status: pairs === 0 ? 'info' : gaps === 0 && seps === 0 ? 'pass' : 'fail',
+      detail: `${gaps} gaps between commentary lines, ${seps} separators`,
+    });
   }
 
   // A1 — amud alignment (info): which Vilna amudim this page's Gemara came from.
