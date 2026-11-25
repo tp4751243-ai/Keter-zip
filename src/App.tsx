@@ -109,6 +109,7 @@ import {
   writeTitlePageTemplateState,
 } from './engine/title-page-templates';
 // v0.9.0 Part C — automatic layout on import + historical recipes.
+import { upgradeLegacyTwoColumnSefer } from './engine/auto-layout';
 import {
   applyRecipeToSettingsById,
   constrainDecisionToSeferType,
@@ -225,9 +226,15 @@ interface InitialBootState {
 function loadInitialBootState(): InitialBootState {
   const recovery = ProjectPersistenceEngine.loadAutosaveWithRecovery();
   if (recovery.snapshot) {
-    const restoredDesign = ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(
+    let restoredDesign = ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(
       recovery.snapshot
     );
+    // a two-column Chassidic sefer saved before its design was trained
+    const upgraded = upgradeLegacyTwoColumnSefer(recovery.snapshot.units ?? [], recovery.snapshot.layoutType, restoredDesign);
+    if (upgraded) {
+      restoredDesign = upgraded;
+      recovery.snapshot = { ...recovery.snapshot, geometry: upgraded.pageLayout.geometry, designSettings: upgraded };
+    }
     return {
       snapshot: recovery.snapshot,
       designSettings: restoredDesign,
@@ -842,7 +849,9 @@ export default function App() {
   // Load a complete ProjectSnapshot as a fresh project session (resetting Undo/Redo baseline)
   const loadProjectSnapshotIntoWorkspace = useCallback(
     (snapshot: ProjectSnapshot, markCleanBaseline: boolean = true) => {
-      const restoredDesign = ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(snapshot);
+      const restoredDesign =
+        upgradeLegacyTwoColumnSefer(snapshot.units ?? [], snapshot.layoutType, ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(snapshot)) ??
+        ProjectPersistenceEngine.buildDesignSettingsFromSnapshot(snapshot);
       const nextState: UndoRedoSnapshotState = {
         documentTitle: snapshot.documentTitle,
         layoutType: snapshot.layoutType,

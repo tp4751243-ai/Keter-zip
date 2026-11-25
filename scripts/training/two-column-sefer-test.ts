@@ -160,5 +160,32 @@ for (const p of body) {
 }
 check('nothing overlaps', coll === 0, `${coll}`);
 
+// the app's post-pass (widow / orphan / column balance) must never move a
+// line onto another (the user's PDF export failed: "חפיפה פיזית" page 195)
+{
+  const { wholeBookBalancingPass } = await import('../../src/engine/book-balancing');
+  const { SpatialExclusionEngine } = await import('../../src/engine/spatial-exclusion');
+  let bad = 0;
+  for (const size of [12.4, 12.8, 13.1, 13.6]) {
+    const s2 = DesignSettingsEngine.updateRoleCharacterStyle(settings, 'main_source', { fontSizePt: size }, 'ai');
+    console.log = (...a: unknown[]) => { if (typeof a[0] === 'string' && a[0].startsWith('Diagnostic:')) return; log(...a); };
+    const d2 = PaginationEngine.paginateDocument({ title: 'קדושת לוי', layoutType: 'two_column', units, geometry: s2.pageLayout.geometry, designSettings: s2 });
+    console.log = log;
+    for (const p of wholeBookBalancingPass(d2.pages).pages) {
+      const cw = p.geometry.pageWidth - p.geometry.marginInside - p.geometry.marginOutside;
+      bad += SpatialExclusionEngine.auditPageCollisions(p.sourceLines, p.rashiLines, p.tosafotLines, p.footnoteLines, p.column2Lines ?? [], cw).length;
+    }
+  }
+  check('after the balancing post-pass nothing overlaps (PDF export is never blocked)', bad === 0, `${bad}`);
+}
+// a project saved with the old generic settings is upgraded on open
+{
+  const { upgradeLegacyTwoColumnSefer } = await import('../../src/engine/auto-layout');
+  const old = DesignSettingsEngine.createDefaultSettings({ layoutType: 'two_column' });
+  const up = upgradeLegacyTwoColumnSefer(units, 'two_column', old);
+  check('an old two-column Chassidic project is upgraded to the trained design on open', !!up && up.pageElements.splitTitleHeader === true && up.roleStyles.main_source.character.fontFamily === 'Noto Rashi Hebrew');
+  check('… and an upgraded one is left alone', up ? upgradeLegacyTwoColumnSefer(units, 'two_column', up) === null : false);
+}
+
 console.log(fails === 0 ? `\nALL PASS (${body.length} pages)` : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

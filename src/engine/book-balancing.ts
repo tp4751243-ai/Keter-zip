@@ -114,6 +114,33 @@ function lineFitsAtStreamEnd(
   return bottom + lineHeight + 2 <= contentHeightPt(page);
 }
 
+
+/**
+ * Can `line` (moved WITHOUT re-positioning — this pass never re-lays a
+ * page out) sit on `page` at the head / end of its column? Only when it
+ * would neither overlap another line on that page nor break the reading
+ * order of its column. Pages laid out by a real engine (two columns, the
+ * Vilna knee …) place every line exactly, so a moved line almost never
+ * fits — and must not be moved: it landed ON another line (the user's
+ * Kedushat Levi PDF export failed on that overlap).
+ */
+function fitsUnmoved(page: PageTypesetResult, line: TypesetLine, atHead: boolean): boolean {
+  const top = line.yTop ?? line.yBaseline - (line.ascent ?? 0);
+  const bot = line.yBottom ?? line.yBaseline + (line.descent ?? 0);
+  const xl = line.xLeft;
+  const xr = line.xRight;
+  const all = allLinesOf(page).filter(l => l !== line);
+  const sameCol = all.filter(l => xl === undefined || l.xLeft === undefined || (Math.min(xr ?? 0, l.xRight ?? 0) - Math.max(xl, l.xLeft) > 1));
+  for (const l of sameCol) {
+    const t = l.yTop ?? l.yBaseline - (l.ascent ?? 0);
+    const b = l.yBottom ?? l.yBaseline + (l.descent ?? 0);
+    if (Math.min(bot, b) - Math.max(top, t) > 0.5) return false;
+    if (atHead && l.yBaseline <= line.yBaseline) return false;
+    if (!atHead && l.yBaseline >= line.yBaseline) return false;
+  }
+  return true;
+}
+
 function findStreamOf(page: PageTypesetResult, line: TypesetLine): (typeof LINE_STREAMS)[number] | null {
   for (const key of LINE_STREAMS) {
     if ((page[key] ?? []).includes(line)) return key;
@@ -171,7 +198,7 @@ export function wholeBookBalancingPass(
         const prevStream = stream ? prev[stream] ?? [] : [];
         const prevUnitLines = prevStream.filter(l => l.unitId === firstLine.unitId);
         const continuesUnit = prevUnitLines.length > 0;
-        if (stream && continuesUnit && lineFitsAtStreamEnd(prev, stream, firstLine)) {
+        if (stream && continuesUnit && lineFitsAtStreamEnd(prev, stream, firstLine) && fitsUnmoved(prev, firstLine, false)) {
           (page as unknown as Record<string, unknown>)[stream] = (page[stream] ?? []).filter(
             l => l !== firstLine
           );
@@ -203,7 +230,7 @@ export function wholeBookBalancingPass(
         const continuesHere = pageLines.some(l => l.unitId === lastPrevLine.unitId);
         if (isFirstLineOfUnit && continuesHere) {
           const stream = findStreamOf(prev, lastPrevLine);
-          if (stream) {
+          if (stream && fitsUnmoved(page, lastPrevLine, true)) {
             (prev as unknown as Record<string, unknown>)[stream] = (prev[stream] ?? []).filter(
               l => l !== lastPrevLine
             );
@@ -272,6 +299,7 @@ export function wholeBookBalancingPass(
         const candidate = remainingNext[0];
         const trial = [...shortLines, candidate];
         if (streamBottom(trial) > contentHeightPt(page)) break;
+        if (!fitsUnmoved({ ...page, [shortKey]: shortLines } as PageTypesetResult, candidate, false)) break;
         shortLines.push(candidate);
         remainingNext.shift();
         pulled += 1;

@@ -1295,3 +1295,32 @@ export function buildRecipePromptContext(): string {
   ];
   return lines.join('\n');
 }
+
+/**
+ * A two-column project saved before the two-column Chassidic sefer was
+ * trained (it was laid out with the generic / Shulchan Aruch settings:
+ * square letters 13 pt, small margins, the book title twice in the head)
+ * is brought up to the trained design when it is opened — when its text
+ * is a Chassidic sefer and it never had that design. The text and every
+ * unit-level edit are kept; only the book-wide design changes.
+ */
+export function upgradeLegacyTwoColumnSefer(
+  units: ContentUnit[],
+  layoutType: BookLayoutType | string | undefined,
+  settings: ProfessionalDesignSettings
+): ProfessionalDesignSettings | null {
+  if (layoutType !== 'two_column') return null;
+  if (settings.roleStyles?.main_source?.paragraph?.openingWordsFontFamily) return null; // already trained
+  if (settings.pageElements?.splitTitleHeader !== undefined) return null; // the user's own choice
+  const t = settings.pageLayout?.seferType;
+  if (t && t !== 'halacha' && t !== 'prose') return null;
+  let recipeId: string;
+  try {
+    recipeId = classifyForImport(units, [], {}).decision.recipeId;
+  } catch {
+    return null;
+  }
+  if (recipeId !== 'chassidic-drush') return null;
+  const next = applyRecipeToSettingsById('chassidic-drush', settings);
+  return next.layout.layoutType === 'two_column' ? next : null;
+}
