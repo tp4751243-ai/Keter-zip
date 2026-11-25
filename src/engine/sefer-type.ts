@@ -172,7 +172,13 @@ export function applySeferTypeRulesInPlace(next: ProfessionalDesignSettings, typ
   // general book page; a page the user or a ready design chose stays.
   if (!talmud && previous === 'talmud') {
     const pl = next.pageLayout;
-    if (Math.abs(pl.geometry.pageWidth - VILNA_FOLIO.w) < 0.5 && Math.abs(pl.geometry.pageHeight - VILNA_FOLIO.h) < 0.5) {
+    // (the folio's own 12 mm margins too: a ready design that CHOSE a
+    // 240 × 340 mm page — the two-column Chassidic sefer — keeps it)
+    if (
+      Math.abs(pl.geometry.pageWidth - VILNA_FOLIO.w) < 0.5 &&
+      Math.abs(pl.geometry.pageHeight - VILNA_FOLIO.h) < 0.5 &&
+      Math.abs(pl.geometry.marginTop - 12 * MM) < 0.5
+    ) {
       pl.geometry = {
         ...pl.geometry,
         pageWidth: GENERAL_PAGE.w,

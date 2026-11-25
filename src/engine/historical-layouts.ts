@@ -608,7 +608,7 @@ export const CHASSIDIC_DRUSH_RECIPE: LayoutRecipe = {
   typography: {
     indentation: { mode: 'none', amountPt: 0 },
     justification: { expansion: 'kashya' },
-    mainFontSizePt: 13.5,
+    mainFontSizePt: 13,
     commentaryFontSizePt: 9,
     headingAlignment: 'center',
   },
@@ -618,13 +618,15 @@ export const CHASSIDIC_DRUSH_RECIPE: LayoutRecipe = {
     folioStyle: 'hebrew-letters',
     folioPosition: 'outer-top',
   },
+  // print b (Kedushat Levi folio, 662 × 960 pt): the head at 4.4–6.2% of
+  // the page height, the columns from 7.8% to 93%, the block 83% of the width
   page: {
-    widthMm: 170,
-    heightMm: 240,
-    marginTopMm: 12,
-    marginBottomMm: 12,
-    marginInsideMm: 12,
-    marginOutsideMm: 12,
+    widthMm: 240,
+    heightMm: 340,
+    marginTopMm: 26,
+    marginBottomMm: 21,
+    marginInsideMm: 20,
+    marginOutsideMm: 21,
   },
   baseLayout: 'two_column',
 };

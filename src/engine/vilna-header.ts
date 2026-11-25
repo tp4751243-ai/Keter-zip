@@ -293,3 +293,59 @@ export function layoutCatchword(
     fontFamily,
   };
 }
+
+/**
+ * Two-column Chassidic sefer head (the user's Kedushat Levi prints):
+ * the book title is split over the two columns — its first word(s) over
+ * the first (right) column, the rest over the second (left) column — the
+ * page's topic (parsha, Yom Tov …) in the centre, and the folio on the
+ * outer corner:
+ *
+ *     ┌ קדושת            פרשת נח            לוי   ד ┐
+ *       (right column)   (centre)   (left column)
+ */
+export function layoutSplitTitleHeader(
+  page: PageTypesetResult,
+  title: string,
+  topic: string,
+  folioText: string,
+  pageSide: 'left' | 'right',
+  fontFamily: string,
+  fontSizePt: number,
+  columnGapPt: number
+): VilnaHeaderGeom {
+  const g = page.geometry;
+  const left = textBlockLeft(g);
+  const right = textBlockRight(g);
+  const colW = (right - left - columnGapPt) / 2;
+  const size = fontSizePt;
+  // the print's gap between the head and the columns (about 0.7 of the head size)
+  const yBaseline = Math.max(size * 1.05, g.marginTop - Math.max(6, size * 0.7));
+  const shaper = new HarfBuzzShaperEngine(size, fontFamily, 400);
+  const space = size * 0.3;
+  const items: VilnaHeaderItem[] = [];
+  const place = (text: string, centre: number, bold: boolean, kind: 'title' | 'folio' = 'title') => {
+    const ws = text.split(/\s+/).filter(Boolean).map(w => ({ text: w, width: measure(shaper, w, bold) }));
+    if (!ws.length) return;
+    const total = ws.reduce((s, w) => s + w.width, 0) + space * (ws.length - 1);
+    let x = centre + total / 2;
+    const words: VilnaHeaderItem['words'] = [];
+    for (const w of ws) {
+      words.push({ text: w.text, xLeft: x - w.width, xRight: x });
+      x -= w.width + space;
+    }
+    items.push({ kind, words, xLeft: Math.min(...words.map(w => w.xLeft)), xRight: Math.max(...words.map(w => w.xRight)), yBaseline, fontSizePt: size, fontWeight: bold ? 700 : 400, fontFamily });
+  };
+  const tw = title.split(/\s+/).filter(Boolean);
+  const cut = Math.ceil(tw.length / 2);
+  place(tw.slice(0, cut).join(' '), right - colW / 2, true); // over the first (right) column
+  place(tw.slice(cut).join(' '), left + colW / 2, true); // over the second (left) column
+  const plainTopic = topic.replace(/[֑-ׇ]/g, '').trim();
+  if (plainTopic && plainTopic !== title.replace(/[֑-ׇ]/g, '').trim()) place(topic, (left + right) / 2, false);
+  if (folioText.trim()) {
+    const w = measure(shaper, folioText, true);
+    const xLeft = pageSide === 'left' ? left : right - w;
+    items.push({ kind: 'folio', words: [{ text: folioText, xLeft, xRight: xLeft + w }], xLeft, xRight: xLeft + w, yBaseline, fontSizePt: size, fontWeight: 700, fontFamily });
+  }
+  return { items, perekName: topic, masechet: title, folio: folioText };
+}

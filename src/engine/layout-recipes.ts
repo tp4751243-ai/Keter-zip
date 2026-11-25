@@ -1167,8 +1167,12 @@ export function applyGenreTypography(recipeId: string, settings: ProfessionalDes
       kashya();
       centerChapter();
       folioHebrew();
-      const bodyPt = DesignSettingsEngine.resolveStyle(next, { role: 'main_source' }).character.fontSizePt;
-      next = DesignSettingsEngine.updateRoleCharacterStyle(next, 'main_source', { fontFamily: 'Noto Rashi Hebrew' }, 'ai');
+      // Measured on print b (folio, 662 × 960 pt — the 240 × 340 mm page):
+      // 50 lines a column at a 16.5 pt pitch, about 9 words a line →
+      // body 13 pt Rashi script on a 16.5 pt line.
+      const bodyPt = 13;
+      next = DesignSettingsEngine.updateRoleCharacterStyle(next, 'main_source', { fontFamily: 'Noto Rashi Hebrew', fontSizePt: bodyPt }, 'ai');
+      next = DesignSettingsEngine.updateRoleParagraphStyle(next, 'main_source', { lineSpacingRatio: Math.round((16.5 / bodyPt) * 1000) / 1000, leadingPt: 16.5 }, 'ai');
       next = DesignSettingsEngine.updateRoleParagraphStyle(
         next,
         'main_source',
@@ -1178,7 +1182,11 @@ export function applyGenreTypography(recipeId: string, settings: ProfessionalDes
       next = DesignSettingsEngine.updateRoleCharacterStyle(next, 'heading', { fontFamily: 'Frank Ruhl Libre', isBold: true, fontSizePt: Math.round(bodyPt * 1.35 * 10) / 10, textColor: '#1E1B18' }, 'ai');
       next = DesignSettingsEngine.updateRoleParagraphStyle(next, 'heading', { alignment: 'center', spaceBeforePt: Math.round(bodyPt * 0.6), spaceAfterPt: Math.round(bodyPt * 0.3) }, 'ai');
       next = DesignSettingsEngine.updateColumnSettings(next, { columnCount: 2, columnGapPt: 12, headingsInColumn: true }, 'ai');
-      next = DesignSettingsEngine.updatePageElementsSettings(next, { catchword: true }, 'ai');
+      next = DesignSettingsEngine.updatePageElementsSettings(next, { catchword: true, splitTitleHeader: true, headerScale: 1.6, showRunningHeader: true }, 'ai');
+      // the head is in bold square letters (the body is Rashi script)
+      if (next.pageElements.runningHeader) {
+        next = DesignSettingsEngine.updatePageElementsSettings(next, { runningHeader: { ...next.pageElements.runningHeader, fontFamily: 'Frank Ruhl Libre' } }, 'ai');
+      }
       break;
     }
     case 'mussar':

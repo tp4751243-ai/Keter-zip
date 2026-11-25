@@ -479,6 +479,14 @@ export interface PageElementsDesignSettings {
   showDecorativeFrame: boolean;
   /** Catchword (custos): the next page's first word at the foot of the page (old prints). */
   catchword?: boolean;
+  /**
+   * Two-column sefer head (Kedushat Levi prints): the book title split over
+   * the two columns ("קדושת" over the first, "לוי" over the second), the
+   * topic (parsha / Yom Tov) centred, the folio on the outer corner.
+   */
+  splitTitleHeader?: boolean;
+  /** Running-head size ÷ body size for the split-title head (default 1.3). */
+  headerScale?: number;
   runningHeaderFontSizePt: number;
   folioNumberPosition: HeaderFolioPosition;
   /** v0.3.0 (Module C) — running-header placement; defaults to the folio position when unset. */

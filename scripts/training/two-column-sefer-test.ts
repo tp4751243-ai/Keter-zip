@@ -124,8 +124,17 @@ const fills = body.slice(0, -1).map(p => {
 });
 check('every page but the last is filled (≥ 85%)', fills.every(f => f >= 0.85), `min ${(Math.min(...fills) * 100).toFixed(0)}%`);
 
-const heads = body.map(p => (p.vilnaHeader?.items ?? []).map(i => i.words.map(w => w.text).join(' ')).join(' | '));
-check('running head: book title on every page', heads.every(h => h.includes('קדושת לוי')), heads[3]);
+const heads = body.map(p => (p.vilnaHeader?.items ?? []).filter(i => i.yBaseline < p.geometry.marginTop).map(i => i.words.map(w => w.text).join(' ')).join(' | '));
+check('the columns start under the head as in print b (text at ≥ 7% of the page height)', body.every(p => Math.min(...lines(p).map(l => (l.yTop ?? l.yBaseline - 10))) + p.geometry.marginTop >= p.geometry.pageHeight * 0.07), String(body[1].geometry.marginTop));
+check('body 13 pt Rashi script on a 16.5 pt line (print b: 50 lines a column)', bodyLines.every(l => Math.abs((l.leadingPt ?? 0) - 16.5) < 0.6 && Math.abs((l.fontSizePt ?? 0) - 13) < 0.6), `${bodyLines[0]?.fontSizePt} / ${bodyLines[0]?.leadingPt}`);
+check('running head: "קדושת" over the first column and "לוי" over the second, on every page', body.every(p => {
+  const items = (p.vilnaHeader?.items ?? []).filter(i => i.yBaseline < p.geometry.marginTop);
+  const at = (t: string) => items.find(i => i.words.map(w => w.text).join(' ') === t);
+  const k = at('קדושת'), l = at('לוי');
+  const mid = (p.geometry.textLeftPt ?? p.geometry.marginOutside) + (p.geometry.pageWidth - p.geometry.marginInside - p.geometry.marginOutside) / 2;
+  return !!k && !!l && k.xLeft > mid && l.xRight < mid;
+}), heads[3]);
+check('the book title is never printed twice in the head', heads.every(h => !h.includes('קדושת לוי')), heads[0]);
 check('running head: the parsha of the page', body.some((p, i) => heads[i].includes('נח')), heads.find(h => h.includes('נח')) ?? '');
 let catchOk = 0;
 for (let i = 0; i + 1 < body.length; i++) {

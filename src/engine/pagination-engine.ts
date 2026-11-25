@@ -93,7 +93,7 @@ import {
 } from './vilna-marginalia';
 import { paginateMikraotGedolot, chumashHeaderParts } from './mikraot-gedolot';
 import { paginateProseColumns } from './prose-columns';
-import { derivePerakim, layoutCatchword, layoutHeaderParts, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
+import { derivePerakim, layoutCatchword, layoutHeaderParts, layoutSplitTitleHeader, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
   ein_mishpat: { he: 'עין משפט', en: 'Ein Mishpat', patterns: [/עין\s*משפט/, /ein[_\s-]*mishpat/i] },
@@ -985,6 +985,22 @@ export class PaginationEngine {
             ),
           });
           // A Vilna daf carries no continuation notes.
+          pg.continuationHeader = undefined;
+          pg.continuationFooter = undefined;
+        } else if (pg.runningChapter !== undefined && !talmudFolio && designSettings?.pageElements?.splitTitleHeader === true) {
+          // Two-column Chassidic sefer (the user's Kedushat Levi prints):
+          // "קדושת" over the first column, "לוי" over the second, the
+          // topic (parsha / Yom Tov) in the centre, folio on the outer corner.
+          pg.vilnaHeader = layoutSplitTitleHeader(
+            pg,
+            title,
+            pg.runningChapter,
+            folioInfo.folioDisplay,
+            spreadSide,
+            vilnaHeaderFont,
+            Math.round(effectiveSourceFontSize * (designSettings.pageElements.headerScale ?? 1.3) * 10) / 10,
+            designSettings?.columns?.columnGapPt ?? 12
+          );
           pg.continuationHeader = undefined;
           pg.continuationFooter = undefined;
         } else if (pg.runningChapter !== undefined && !talmudFolio) {
