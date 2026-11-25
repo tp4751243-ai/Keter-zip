@@ -336,8 +336,22 @@ export class DynamicKneeEngine {
 
     let bestResult: ReturnType<typeof this.solveSingleCandidate> | null = null;
 
+    // T14 — on a Vilna page the Gemara width, the flank bias and the
+    // (contracting) step are fixed by the print, so candidates that differ
+    // only in those are the SAME solve: run each distinct one once.
+    const vilnaPage = isTalmudFolio(input.designSettings, 'rav_text');
+    const seen = new Set<string>();
+    const distinct = vilnaPage
+      ? candidates.filter(c => {
+          const k = `${c.upperKneeLines}|${c.lineHeightScale}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+      : candidates;
+
     trialLineCacheStats.pageSolves++;
-    for (const candidate of candidates) {
+    for (const candidate of distinct) {
       trialLineCacheStats.candidateSolves++;
       const solved = this.solveSingleCandidate(input, candidate);
       const solvedOverflow =

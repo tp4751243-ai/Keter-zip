@@ -145,7 +145,7 @@ import {
   StructuredDiagnostic,
   TypesetLine,
 } from './types/typesetter';
-import { PaginationEngine, type PaginationInput } from './engine/pagination-engine';
+import { PaginationEngine, clearAmudLayoutCache, type PaginationInput } from './engine/pagination-engine';
 import { backgroundLayoutAvailable, layoutInBackground } from './engine/layout-client';
 import { DocxImporter } from './engine/docx-importer';
 import { buildBackOfTitlePage, buildTitlePageResult } from './engine/toc-engine';
@@ -677,6 +677,11 @@ export default function App() {
     coalesce: true,
   });
 
+  // T14 (performance) — the page being viewed is NOT a project change: it
+  // is read from a ref, so turning a page never re-snapshots, re-compares
+  // or autosaves the whole book (that cost ~0.7 s per page turn).
+  const currentPageIndexRef = useRef(currentPageIndex);
+  currentPageIndexRef.current = currentPageIndex;
   const currentSnapshotState: UndoRedoSnapshotState = useMemo(
     () => ({
       documentTitle,
@@ -694,7 +699,7 @@ export default function App() {
       selectedRashiFont,
       selectedTosafotFont,
       enableOrnaments,
-      currentPageIndex,
+      currentPageIndex: currentPageIndexRef.current,
       projectRules,
       localOverrides,
       designSettings,
@@ -713,7 +718,6 @@ export default function App() {
       selectedRashiFont,
       selectedTosafotFont,
       enableOrnaments,
-      currentPageIndex,
       projectRules,
       localOverrides,
       designSettings,
@@ -726,36 +730,23 @@ export default function App() {
     historyManagerRef.current = new UndoRedoHistoryManager(currentSnapshotState);
   }
 
-  // Last saved baseline snapshot for accurate dirty state detection
-  const lastSavedBaselineRef = useRef<ProjectSnapshot | null>(null);
-  if (!lastSavedBaselineRef.current) {
-    lastSavedBaselineRef.current = UndoRedoHistoryManager.toProjectSnapshot(
-      currentSnapshotState,
-      t("מצב שמור התחלתי")
-    );
-  }
 
-  const currentProjectSnapshot: ProjectSnapshot = useMemo(
-    () =>
-      UndoRedoHistoryManager.toProjectSnapshot(
-        currentSnapshotState,
-        lastActionLabelRef.current.label
-      ),
-    [currentSnapshotState]
-  );
-
-  // Track whether current project has unsaved changes relative to lastSavedBaseline
-  const isDirty: boolean = useMemo(() => {
-    void baselineVersion;
-    return ProjectPersistenceEngine.isSnapshotDirty(
-      currentProjectSnapshot,
-      lastSavedBaselineRef.current
-    );
-  }, [currentProjectSnapshot, baselineVersion]);
+  // T14 — unsaved-changes state by a change counter (was: two full
+  // project snapshots compared as JSON on every render that changed state).
+  const changeSeqRef = useRef(0);
+  const savedSeqRef = useRef(0);
+  const pendingCleanBaselineRef = useRef(true);
+  const [isDirty, setIsDirty] = useState(false);
+  const markCleanNow = useCallback(() => {
+    savedSeqRef.current = changeSeqRef.current;
+    setIsDirty(false);
+  }, []);
+  void baselineVersion;
 
   // Warn before browser tab/window close when there are unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (autosaveTimerRef.current !== null) flushAutosave();
       if (isDirty) {
         e.preventDefault();
         e.returnValue = '';
@@ -767,15 +758,37 @@ export default function App() {
 
   // Record meaningful document/layout/formatting/editor changes into UndoRedoHistoryManager
   // AND persist real editable project state to Autosave (with last-known-good backup)
-  useEffect(() => {
-    const snapshotToAutosave = UndoRedoHistoryManager.toProjectSnapshot(
-      currentSnapshotState,
+  const latestSnapshotStateRef = useRef(currentSnapshotState);
+  latestSnapshotStateRef.current = currentSnapshotState;
+  const autosaveTimerRef = useRef<number | null>(null);
+  const flushAutosave = useCallback(() => {
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    const snap = UndoRedoHistoryManager.toProjectSnapshot(
+      { ...latestSnapshotStateRef.current, currentPageIndex: currentPageIndexRef.current },
       lastActionLabelRef.current.label
     );
-    const savedOk = ProjectPersistenceEngine.saveAutosave(snapshotToAutosave);
-    if (savedOk) {
-      setLastAutosaveTimestamp(snapshotToAutosave.timestamp);
+    if (ProjectPersistenceEngine.saveAutosave(snap)) setLastAutosaveTimestamp(snap.timestamp);
+  }, []);
+  useEffect(() => {
+    // T14 — count the change; autosave once, 1.5 s after the last change
+    // (it used to serialise and validate the whole book on every change).
+    changeSeqRef.current++;
+    if (pendingCleanBaselineRef.current) {
+      pendingCleanBaselineRef.current = false;
+      savedSeqRef.current = changeSeqRef.current;
     }
+    setIsDirty(changeSeqRef.current !== savedSeqRef.current);
+    if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      const run = () => flushAutosave();
+      const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+      if (ric) ric(run, { timeout: 3000 });
+      else run();
+    }, 1500);
 
     if (isApplyingUndoRedoRef.current) {
       isApplyingUndoRedoRef.current = false;
@@ -878,10 +891,7 @@ export default function App() {
       setHasOpenedBook(true);
 
       if (markCleanBaseline) {
-        lastSavedBaselineRef.current = UndoRedoHistoryManager.toProjectSnapshot(
-          nextState,
-          snapshot.label || snapshot.documentTitle
-        );
+        pendingCleanBaselineRef.current = true;
         setBaselineVersion(v => v + 1);
       }
 
@@ -1059,6 +1069,7 @@ export default function App() {
       if (cancelled) return;
       HarfBuzzShaperEngine.clearMetricCache();
       clearInkCache();
+      clearAmudLayoutCache();
       setFontsVersion(v => v + 1);
     };
     const faces = ['Frank Ruhl Libre', 'Noto Rashi Hebrew', 'Noto Serif Hebrew', 'David Libre'];
@@ -1156,7 +1167,18 @@ export default function App() {
     setLayoutPending(true);
     // a short pause lets fast edits settle into one layout
     const timer = setTimeout(() => {
-      layoutInBackground(layoutInput)
+      layoutInBackground(layoutInput, partial => {
+        if (cancelled) return;
+        // T14 — show the amudim laid out so far; on a re-layout, the rest
+        // of the book stays as it was until its new pages arrive.
+        setAsyncBody(prev => {
+          if (!prev) return partial;
+          const fresh = new Set(partial.pages.map(p => p.amudKey).filter(Boolean));
+          const rest = prev.pages.filter(p => !p.amudKey || !fresh.has(p.amudKey));
+          const pages = [...partial.pages, ...rest.filter(p => p.amudKey)].map((p, i) => ({ ...p, pageIndex: i }));
+          return { ...partial, pages, totalPages: pages.length };
+        });
+      })
         .then(({ doc }) => {
           if (cancelled) return;
           setAsyncBody(doc);
@@ -1355,7 +1377,7 @@ export default function App() {
   const handleSaveProjectFile = useCallback(
     async (suggestedName?: string): Promise<boolean> => {
       const snapshot = UndoRedoHistoryManager.toProjectSnapshot(
-        currentSnapshotState,
+        { ...currentSnapshotState, currentPageIndex: currentPageIndexRef.current },
         tf('שמירה יזומה: {title}', { title: documentTitle })
       );
       ProjectPersistenceEngine.saveVersionSnapshot(snapshot);
@@ -1365,7 +1387,7 @@ export default function App() {
         suggestedName
       );
       if (result.saved) {
-        lastSavedBaselineRef.current = snapshot;
+        markCleanNow();
         setBaselineVersion(v => v + 1);
         setLastAutosaveTimestamp(snapshot.timestamp);
         setRecentProjects(ProjectPersistenceEngine.getRecentProjects());
@@ -2859,7 +2881,7 @@ export default function App() {
   const handleFreezePrintVersion = useCallback(() => {
     try {
       const label = `גרסת דפוס ${printVersions.length + 1} — ${documentTitle}`;
-      const snapshot = UndoRedoHistoryManager.toProjectSnapshot(currentSnapshotState, label);
+      const snapshot = UndoRedoHistoryManager.toProjectSnapshot({ ...currentSnapshotState, currentPageIndex: currentPageIndexRef.current }, label);
       ProjectPersistenceEngine.freezePrintVersion(snapshot, label);
       setPrintVersions(ProjectPersistenceEngine.listPrintVersions());
       showToast(t("גרסת הדפוס נשמרה — ניתן להוריד ממנה PDF גם אחרי שינויים"), 'success');

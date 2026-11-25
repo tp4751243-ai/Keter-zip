@@ -148,6 +148,16 @@ async function main() {
   console.log = log;
   { const { trialLineCacheStats } = await import('../../src/engine/dynamic-knee'); console.log('trial line probes', JSON.stringify(trialLineCacheStats)); }
   console.log(`pages ${doc.pages.length} (introduction pages ${doc.pages.filter(p => p.chumashIntro).length}); decision ${auto.decision?.recipeId}`);
+  if (process.env.REPEAT) {
+    // T14 — an edit re-lays only its own amud (per-amud cache)
+    const idx = all.findIndex((u, i) => u.role === 'main_source' && i > all.length / 3);
+    const edited = all.map((u, i) => (i === idx ? { ...u, rawText: u.rawText.replace(/\S+/, m => m + 'א') } : u));
+    const t0 = performance.now();
+    const doc2 = PaginationEngine.paginateDocument({ title: files[0].replace(/\.docx$/, ''), layoutType: settings.layout.layoutType as any, units: edited, links, geometry: settings.pageLayout.geometry, designSettings: settings });
+    const t1 = performance.now();
+    PaginationEngine.paginateDocument({ title: files[0].replace(/\.docx$/, ''), layoutType: settings.layout.layoutType as any, units: edited, links, geometry: settings.pageLayout.geometry, designSettings: settings });
+    console.log(`REPEAT one-word edit re-layout ${(t1 - t0).toFixed(0)} ms (${doc2.pages.length} pages); unchanged re-layout ${(performance.now() - t1).toFixed(0)} ms`);
+  }
   if (process.env.RENDER_DIR) {
     const { PdfExporter } = await import('../../src/engine/pdf-exporter');
     fs.mkdirSync(process.env.RENDER_DIR, { recursive: true });
@@ -216,6 +226,24 @@ async function main() {
     }
     if (process.env.HEAD_GEOM) {
       for (const pg of body.slice(0, 2)) console.log('HEAD', pg.amudKey, JSON.stringify(pg.geometry), JSON.stringify(pg.vilnaHeader?.items.map(i => [i.kind, Math.round(i.xLeft), Math.round(i.xRight)])));
+    }
+    if (process.env.SIZE_DUMP) {
+      const total = JSON.stringify(doc).length;
+      let glyphs = 0, words = 0, wordCount = 0, lines = 0;
+      const keyBytes = new Map<string, number>();
+      for (const pg of doc.pages) for (const ls of [pg.sourceLines, pg.rashiLines, pg.tosafotLines, pg.tertiaryLines ?? [], pg.footnoteLines]) for (const l of ls) {
+        lines++;
+        for (const w of l.words) {
+          wordCount++;
+          glyphs += JSON.stringify(w.glyphs ?? []).length;
+          words += JSON.stringify(w).length;
+          for (const [k, v] of Object.entries(w)) keyBytes.set(k, (keyBytes.get(k) ?? 0) + JSON.stringify(v ?? null).length + k.length + 3);
+        }
+      }
+      console.log(`SIZE doc ${(total / 1e6).toFixed(1)} MB JSON; ${lines} lines, ${wordCount} words; words ${(words / 1e6).toFixed(1)} MB of which glyphs ${(glyphs / 1e6).toFixed(1)} MB`);
+      console.log('SIZE top word fields', [...keyBytes].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => `${k}=${(v / 1e6).toFixed(2)}MB`).join(' '));
+      const g0 = doc.pages[1]?.sourceLines[3]?.words.find(w => !w.isSpace);
+      console.log('SIZE sample glyph', JSON.stringify(g0?.glyphs?.[0]));
     }
     if (process.env.LINE_DUMP) {
       const plan = PdfExporter.buildPageRenderPlan(body[Number(process.env.LINE_DUMP)]);

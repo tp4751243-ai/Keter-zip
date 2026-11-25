@@ -50,6 +50,164 @@ interface PageNavigatorSidebarProps {
   onDeletePage?: (pageIndex: number) => void;
 }
 
+/**
+ * T14 (performance) — one page's miniature in the sidebar. Memoized: a
+ * page turn re-renders only the two thumbnails whose selection changed,
+ * not every page of the book (a tractate: ~20,000 elements each time).
+ */
+const MiniPage = React.memo(function MiniPage({
+  page,
+  layoutType,
+  isSelected,
+}: {
+  page: PageTypesetResult;
+  layoutType?: BookLayoutType;
+  isSelected: boolean;
+}) {
+  const thumbScale = 0.22;
+  const thumbW = Math.round(page.geometry.pageWidth * thumbScale);
+  const thumbH = Math.round(page.geometry.pageHeight * thumbScale);
+  const mTop = page.geometry.marginTop * thumbScale;
+  const mBottom = page.geometry.marginBottom * thumbScale;
+  const mInside = page.geometry.marginInside * thumbScale;
+  const mOutside = page.geometry.marginOutside * thumbScale;
+  const contentW = thumbW - mInside - mOutside;
+  void mBottom;
+  return (
+    <div
+      className={`relative bg-[var(--ui-page-bg)] rounded-xs shadow-xs overflow-hidden border ${
+        isSelected ? 'border-[var(--ui-accent)]' : 'border-[var(--ui-page-border)]'
+      }`}
+      style={{ width: `${thumbW}px`, height: `${thumbH}px` }}
+    >
+      {/* Tiny Running Header */}
+      <div
+        className="absolute border-b border-[#C5B9A5]"
+        style={{
+          top: `${Math.max(2, mTop - 5)}px`,
+          left: `${mInside}px`,
+          width: `${contentW}px`,
+          height: '1px',
+        }}
+      />
+
+      {/* Render miniature line bars for Source, Rashi, Tosafot, Column2, Footnotes */}
+      {page.sourceLines.map((line, lIdx) => {
+        const y = mTop + line.yBaseline * thumbScale;
+        const w = Math.max(4, line.targetWidth * thumbScale);
+        const contentWidthPt =
+          page.geometry.pageWidth -
+          page.geometry.marginInside -
+          page.geometry.marginOutside;
+        const rightOffsetPt =
+          line.xRight !== undefined
+            ? Math.max(0, contentWidthPt - line.xRight)
+            : layoutType === 'rav_text' || layoutType === 'mikraot_gedolot'
+            ? page.knee.rightCommentaryWidth +
+              page.knee.gutterWidth +
+              (line.xStart ?? 0)
+            : line.xStart ?? 0;
+        const rightPx = mInside + rightOffsetPt * thumbScale;
+        const isHeading =
+          line.role === 'chapter' ||
+          line.role === 'main_title' ||
+          line.role === 'heading';
+        return (
+          <div
+            key={`ts-${lIdx}`}
+            className={`absolute ${
+              isHeading ? 'bg-[#344A67]' : 'bg-[#20242B]/85'
+            }`}
+            style={{
+              top: `${y}px`,
+              right: `${rightPx}px`,
+              width: `${w}px`,
+              height: isHeading ? '2.2px' : '1.5px',
+            }}
+          />
+        );
+      })}
+
+      {page.rashiLines.map((line, lIdx) => {
+        const y = mTop + line.yBaseline * thumbScale;
+        const w = Math.max(3, line.targetWidth * thumbScale);
+        const contentWidthPt =
+          page.geometry.pageWidth -
+          page.geometry.marginInside -
+          page.geometry.marginOutside;
+        const rightOffsetPt =
+          line.xRight !== undefined
+            ? Math.max(0, contentWidthPt - line.xRight)
+            : line.xStart ?? 0;
+        const rightPx = mInside + rightOffsetPt * thumbScale;
+        return (
+          <div
+            key={`tr-${lIdx}`}
+            className="absolute bg-[#687180]/75"
+            style={{
+              top: `${y}px`,
+              right: `${rightPx}px`,
+              width: `${w}px`,
+              height: '1.1px',
+            }}
+          />
+        );
+      })}
+
+      {page.tosafotLines.map((line, lIdx) => {
+        const y = mTop + line.yBaseline * thumbScale;
+        const w = Math.max(3, line.targetWidth * thumbScale);
+        const leftPx =
+          line.xLeft !== undefined
+            ? mOutside + line.xLeft * thumbScale
+            : mOutside;
+        return (
+          <div
+            key={`tt-${lIdx}`}
+            className="absolute bg-[#475569]/75"
+            style={{
+              top: `${y}px`,
+              left: `${leftPx}px`,
+              width: `${w}px`,
+              height: '1.1px',
+            }}
+          />
+        );
+      })}
+
+      {page.column2Lines &&
+        page.column2Lines.map((line, lIdx) => {
+          const y = mTop + line.yBaseline * thumbScale;
+          const w = Math.max(3, line.targetWidth * thumbScale);
+          return (
+            <div
+              key={`tc2-${lIdx}`}
+              className="absolute bg-[#20242B]/80"
+              style={{
+                top: `${y}px`,
+                left: `${mOutside}px`,
+                width: `${w}px`,
+                height: '1.4px',
+              }}
+            />
+          );
+        })}
+
+      {page.footnoteLines.length > 0 && (
+        <div
+          className="absolute border-t border-[#BFB39F] bg-[#78716C]/20"
+          style={{
+            bottom: `${mBottom}px`,
+            left: `${mInside}px`,
+            width: `${contentW}px`,
+            height: `${Math.min(18, page.footnoteLines.length * 2.2)}px`,
+          }}
+        />
+      )}
+    </div>
+  );
+});
+
 export const PageNavigatorSidebar: React.FC<PageNavigatorSidebarProps> = ({
   pages,
   currentPageIndex,
@@ -254,6 +412,8 @@ export const PageNavigatorSidebar: React.FC<PageNavigatorSidebarProps> = ({
                     setDragFrom(null);
                   }}
                   onClick={() => onSelectPage(idx)}
+                  // the browser skips laying out thumbnails scrolled out of view
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${Math.round(page.geometry.pageHeight * 0.22) + 80}px` }}
                   title={`${t('דף')} ${folio.he} (${folio.latin}) — ${t('גרור לסידור מחדש')}`}
                   className={`group rounded-xl p-3 border transition-all cursor-grab flex flex-col items-center ${
                     isSelected
@@ -328,137 +488,7 @@ export const PageNavigatorSidebar: React.FC<PageNavigatorSidebarProps> = ({
                   </div>
 
                   {/* Miniature Visual Page Sheet Schematic */}
-                  <div
-                    className={`relative bg-[var(--ui-page-bg)] rounded-xs shadow-xs overflow-hidden border ${
-                      isSelected ? 'border-[var(--ui-accent)]' : 'border-[var(--ui-page-border)]'
-                    }`}
-                    style={{ width: `${thumbW}px`, height: `${thumbH}px` }}
-                  >
-                    {/* Tiny Running Header */}
-                    <div
-                      className="absolute border-b border-[#C5B9A5]"
-                      style={{
-                        top: `${Math.max(2, mTop - 5)}px`,
-                        left: `${mInside}px`,
-                        width: `${contentW}px`,
-                        height: '1px',
-                      }}
-                    />
-
-                    {/* Render miniature line bars for Source, Rashi, Tosafot, Column2, Footnotes */}
-                    {page.sourceLines.map((line, lIdx) => {
-                      const y = mTop + line.yBaseline * thumbScale;
-                      const w = Math.max(4, line.targetWidth * thumbScale);
-                      const contentWidthPt =
-                        page.geometry.pageWidth -
-                        page.geometry.marginInside -
-                        page.geometry.marginOutside;
-                      const rightOffsetPt =
-                        line.xRight !== undefined
-                          ? Math.max(0, contentWidthPt - line.xRight)
-                          : layoutType === 'rav_text' || layoutType === 'mikraot_gedolot'
-                          ? page.knee.rightCommentaryWidth +
-                            page.knee.gutterWidth +
-                            (line.xStart ?? 0)
-                          : line.xStart ?? 0;
-                      const rightPx = mInside + rightOffsetPt * thumbScale;
-                      const isHeading =
-                        line.role === 'chapter' ||
-                        line.role === 'main_title' ||
-                        line.role === 'heading';
-                      return (
-                        <div
-                          key={`ts-${lIdx}`}
-                          className={`absolute ${
-                            isHeading ? 'bg-[#344A67]' : 'bg-[#20242B]/85'
-                          }`}
-                          style={{
-                            top: `${y}px`,
-                            right: `${rightPx}px`,
-                            width: `${w}px`,
-                            height: isHeading ? '2.2px' : '1.5px',
-                          }}
-                        />
-                      );
-                    })}
-
-                    {page.rashiLines.map((line, lIdx) => {
-                      const y = mTop + line.yBaseline * thumbScale;
-                      const w = Math.max(3, line.targetWidth * thumbScale);
-                      const contentWidthPt =
-                        page.geometry.pageWidth -
-                        page.geometry.marginInside -
-                        page.geometry.marginOutside;
-                      const rightOffsetPt =
-                        line.xRight !== undefined
-                          ? Math.max(0, contentWidthPt - line.xRight)
-                          : line.xStart ?? 0;
-                      const rightPx = mInside + rightOffsetPt * thumbScale;
-                      return (
-                        <div
-                          key={`tr-${lIdx}`}
-                          className="absolute bg-[#687180]/75"
-                          style={{
-                            top: `${y}px`,
-                            right: `${rightPx}px`,
-                            width: `${w}px`,
-                            height: '1.1px',
-                          }}
-                        />
-                      );
-                    })}
-
-                    {page.tosafotLines.map((line, lIdx) => {
-                      const y = mTop + line.yBaseline * thumbScale;
-                      const w = Math.max(3, line.targetWidth * thumbScale);
-                      const leftPx =
-                        line.xLeft !== undefined
-                          ? mOutside + line.xLeft * thumbScale
-                          : mOutside;
-                      return (
-                        <div
-                          key={`tt-${lIdx}`}
-                          className="absolute bg-[#475569]/75"
-                          style={{
-                            top: `${y}px`,
-                            left: `${leftPx}px`,
-                            width: `${w}px`,
-                            height: '1.1px',
-                          }}
-                        />
-                      );
-                    })}
-
-                    {page.column2Lines &&
-                      page.column2Lines.map((line, lIdx) => {
-                        const y = mTop + line.yBaseline * thumbScale;
-                        const w = Math.max(3, line.targetWidth * thumbScale);
-                        return (
-                          <div
-                            key={`tc2-${lIdx}`}
-                            className="absolute bg-[#20242B]/80"
-                            style={{
-                              top: `${y}px`,
-                              left: `${mOutside}px`,
-                              width: `${w}px`,
-                              height: '1.4px',
-                            }}
-                          />
-                        );
-                      })}
-
-                    {page.footnoteLines.length > 0 && (
-                      <div
-                        className="absolute border-t border-[#BFB39F] bg-[#78716C]/20"
-                        style={{
-                          bottom: `${mBottom}px`,
-                          left: `${mInside}px`,
-                          width: `${contentW}px`,
-                          height: `${Math.min(18, page.footnoteLines.length * 2.2)}px`,
-                        }}
-                      />
-                    )}
-                  </div>
+                  <MiniPage page={page} layoutType={layoutType} isSelected={isSelected} />
 
                   {/* Line counts summary under thumbnail */}
                   <div className="w-full mt-2.5 flex items-center justify-between text-[10px] text-[var(--ui-text-secondary)] px-0.5">

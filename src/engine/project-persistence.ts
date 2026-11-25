@@ -359,6 +359,54 @@ export class UndoRedoHistoryManager {
     };
   }
 
+  /**
+   * T14 (performance) — the live objects last recorded, per state field.
+   * A field whose live object is the same as last time is unchanged
+   * (React state is replaced, never mutated in place), so its private
+   * copy is reused and it is not compared again. Before, every change
+   * compared and deep-copied the WHOLE book (thousands of paragraphs) —
+   * hundreds of ms per click on a big book.
+   */
+  private lastLive: Partial<Record<keyof UndoRedoSnapshotState, unknown>> = {};
+
+  private static fieldJson(key: keyof UndoRedoSnapshotState, v: unknown): string {
+    if (key === 'designSettings' && v) {
+      const d = v as NonNullable<UndoRedoSnapshotState['designSettings']>;
+      return JSON.stringify({
+        layoutType: d.layoutType,
+        pageLayout: d.pageLayout,
+        columns: d.columns,
+        pageElements: d.pageElements,
+        ravText: d.ravText,
+        footnotes: d.footnotes,
+        projectRoleStyles: d.projectRoleStyles,
+        localOverrides: d.localOverrides,
+        localUnitOverrides: d.localUnitOverrides,
+        localWordOverrides: d.localWordOverrides,
+      });
+    }
+    return JSON.stringify(v ?? null);
+  }
+
+  /** The fields whose live object changed since the last recorded state. */
+  private changedFields(next: UndoRedoSnapshotState): Array<keyof UndoRedoSnapshotState> {
+    return (Object.keys(next) as Array<keyof UndoRedoSnapshotState>).filter(
+      k => k !== 'currentPageIndex' && !(k in this.lastLive && this.lastLive[k] === next[k])
+    );
+  }
+
+  /** A private copy of `next`, sharing the copies of unchanged fields. */
+  private sharedClone(next: UndoRedoSnapshotState, changed: Array<keyof UndoRedoSnapshotState>): UndoRedoSnapshotState {
+    const out = { ...this.currentState, currentPageIndex: next.currentPageIndex } as UndoRedoSnapshotState;
+    const w = out as unknown as Record<string, unknown>;
+    for (const k of changed) {
+      const v = next[k];
+      w[k] = v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+    }
+    for (const k of Object.keys(next) as Array<keyof UndoRedoSnapshotState>) this.lastLive[k] = next[k];
+    return out;
+  }
+
   public recordChange(
     nextState: UndoRedoSnapshotState,
     label: string,
@@ -366,8 +414,14 @@ export class UndoRedoHistoryManager {
     allowCoalesce: boolean = true,
     now: number = Date.now()
   ): boolean {
-    if (UndoRedoHistoryManager.statesAreEqual(this.currentState, nextState)) {
-      this.currentState = UndoRedoHistoryManager.cloneState(nextState);
+    const changed = this.changedFields(nextState);
+    const realChange = changed.filter(
+      k =>
+        UndoRedoHistoryManager.fieldJson(k, (this.currentState as unknown as Record<string, unknown>)[k]) !==
+        UndoRedoHistoryManager.fieldJson(k, nextState[k])
+    );
+    if (realChange.length === 0) {
+      this.currentState = this.sharedClone(nextState, changed);
       return false;
     }
 
@@ -384,7 +438,9 @@ export class UndoRedoHistoryManager {
         timestamp: this.currentTimestamp,
         operationKey,
         label,
-        state: UndoRedoHistoryManager.cloneState(this.currentState),
+        // currentState is already a private copy that is replaced (never
+        // mutated) below — it goes on the stack as is.
+        state: this.currentState,
       });
       if (this.undoStack.length > this.maxDepth) {
         this.undoStack.shift();
@@ -393,13 +449,10 @@ export class UndoRedoHistoryManager {
 
     // Any new edit after Undo invalidates the Redo branch
     this.redoStack = [];
-    this.currentState = UndoRedoHistoryManager.cloneState(nextState);
+    this.currentState = this.sharedClone(nextState, changed);
     this.currentOperationKey = operationKey;
     this.currentTimestamp = now;
-
-    ProjectPersistenceEngine.saveAutosave(
-      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, label)
-    );
+    // (the app autosaves, debounced — not here, on every change)
     return true;
   }
 
@@ -408,6 +461,7 @@ export class UndoRedoHistoryManager {
    * opening a `.keter.json` project, or completing a full document replacement.
    */
   public resetForNewProject(state: UndoRedoSnapshotState, label: string = 'פרויקט חדש'): void {
+    this.lastLive = {};
     this.undoStack = [];
     this.redoStack = [];
     this.currentState = UndoRedoHistoryManager.cloneState(state);
@@ -496,15 +550,15 @@ export class UndoRedoHistoryManager {
       timestamp: Date.now(),
       operationKey: prevEntry.operationKey,
       label: prevEntry.label,
-      state: UndoRedoHistoryManager.cloneState(this.currentState),
+      // private copies, replaced and never mutated: moved, not re-copied (T14)
+      state: this.currentState,
     });
-    this.currentState = UndoRedoHistoryManager.cloneState(prevEntry.state);
+    this.currentState = prevEntry.state;
     this.currentOperationKey = 'undo';
     this.currentTimestamp = 0;
-
-    ProjectPersistenceEngine.saveAutosave(
-      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, `ביטול: ${prevEntry.label}`)
-    );
+    // the app's live objects will be the copy returned below
+    this.lastLive = {};
+    // (the app autosaves, debounced)
     return UndoRedoHistoryManager.cloneState(this.currentState);
   }
 
@@ -516,15 +570,15 @@ export class UndoRedoHistoryManager {
       timestamp: Date.now(),
       operationKey: nextEntry.operationKey,
       label: nextEntry.label,
-      state: UndoRedoHistoryManager.cloneState(this.currentState),
+      // private copies, replaced and never mutated: moved, not re-copied (T14)
+      state: this.currentState,
     });
-    this.currentState = UndoRedoHistoryManager.cloneState(nextEntry.state);
+    this.currentState = nextEntry.state;
     this.currentOperationKey = 'redo';
     this.currentTimestamp = 0;
-
-    ProjectPersistenceEngine.saveAutosave(
-      UndoRedoHistoryManager.toProjectSnapshot(this.currentState, `ביצוע מחדש: ${nextEntry.label}`)
-    );
+    // the app's live objects will be the copy returned below
+    this.lastLive = {};
+    // (the app autosaves, debounced)
     return UndoRedoHistoryManager.cloneState(this.currentState);
   }
 
@@ -755,14 +809,17 @@ export class ProjectPersistenceEngine {
       let rotatedBackup = false;
       const previousGood = localStorage.getItem(AUTOSAVE_KEY);
       if (previousGood) {
+        // T14 — the previous autosave was validated when it was written:
+        // rotate it to the backup as-is (re-parsing and re-validating a
+        // whole book on every save cost hundreds of ms).
         try {
-          const prevParsed = JSON.parse(previousGood);
-          if (this.validateProjectPayload(prevParsed).valid) {
+          const t = previousGood.trim();
+          if (t.startsWith('{') && t.endsWith('}') && t.includes('"units"')) {
             localStorage.setItem(AUTOSAVE_BACKUP_KEY, previousGood);
             rotatedBackup = true;
           }
         } catch {
-          // Keep existing backup untouched if previous primary was corrupted
+          // keep the existing backup untouched
         }
       }
 

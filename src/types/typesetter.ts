@@ -863,6 +863,8 @@ export interface PageTypesetResult {
   chumashIntro?: boolean;
   /** Talmud: the amud this page sets ("ב.", "ב:"), from the import's דף headings — one amud per page. */
   amudKey?: string;
+  /** Index of this page within its amud (0 = the amud's page; 1+ = carried over). */
+  amudPageIdx?: number;
   /**
    * Layout training T2.2 — set on the page where the knee solver reserved
    * the opening frame's space at the top of the Gemara column; the frame

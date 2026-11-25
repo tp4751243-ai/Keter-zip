@@ -123,6 +123,12 @@ export interface PaginationInput {
   units: ContentUnit[];
   links?: RavTextLink[];
   /**
+   * T14 — Talmud, one amud per page: lay out only these amudim (keys
+   * "ב.", "ב:" …). Several workers each lay out a share of the book at
+   * once; the app joins their pages in amud order.
+   */
+  amudSubset?: string[];
+  /**
    * v0.9.8 Phase 3/4 — AnchorLinks from the CommentaryLinkerEngine.
    * When present (and no explicit `links` are given) they are converted
    * to RavTextLinks and fed to the rav-text path as the explicit links,
@@ -207,6 +213,37 @@ function scaleTalmudTextSizes(ds: ProfessionalDesignSettings | undefined, f: num
     }
   }
   return next;
+}
+
+/** T14 — laid-out amudim, by settings + the amud's own text (bounded). */
+const amudLayoutCache = new Map<string, BookTypesetDocument>();
+function rememberAmudLayout(key: string, doc: BookTypesetDocument): void {
+  if (amudLayoutCache.size > 400) {
+    const oldest = amudLayoutCache.keys().next().value;
+    if (oldest !== undefined) amudLayoutCache.delete(oldest);
+  }
+  amudLayoutCache.set(key, structuredClone(doc));
+}
+/** Forget laid-out amudim (fonts changed: every measurement changes). */
+export function clearAmudLayoutCache(): void {
+  amudLayoutCache.clear();
+}
+/** Everything outside an amud's own text that changes its layout. */
+function amudCacheSettingsKey(input: PaginationInput, geometry: PageGeometry): string {
+  return JSON.stringify([
+    geometry,
+    input.designSettings ?? null,
+    input.kneeSettings ?? null,
+    input.sourceFontSize,
+    input.commentaryFontSize,
+    input.sourceFontFamily,
+    input.rashiFontFamily,
+    input.tosafotFontFamily,
+    input.enableOrnaments,
+    input.projectRules ?? null,
+    input.localOverrides ?? null,
+    input.rulesConfig ?? null,
+  ]);
 }
 
 /** Body page index of an amud key (ב. → 0 with the default start at daf ב amud א). */
@@ -497,8 +534,24 @@ export class PaginationEngine {
         if (amudim) {
           const pages: PageTypesetResult[] = [];
           let first: BookTypesetDocument | null = null;
+          const subset = input.amudSubset ? new Set(input.amudSubset) : null;
+          // T14 — an amud whose text and settings did not change is not
+          // laid out again (an edit re-lays its own amud only).
+          const settingsKey = amudCacheSettingsKey(input, geometry);
           amudim.forEach((g, gi) => {
+            if (subset && !subset.has(g.key)) return;
             const ids = new Set(g.units.map(u => u.id));
+            // recto / verso from the amud itself (amud א recto, ב verso),
+            // so every amud lays out on its own — in any worker, any order
+            const amudParity = (bodyIndexOfAmud(g.key) ?? gi) % 2;
+            const cacheKey = `${settingsKey}|${gi === 0 ? 'first' : ''}|${g.key}|${JSON.stringify(g.units)}|${JSON.stringify(effectiveRavLinks?.filter(l => ids.has(l.sourceUnitId) && ids.has(l.commentaryUnitId)) ?? [])}`;
+            const cached = amudLayoutCache.get(cacheKey);
+            if (cached) {
+              const copy = structuredClone(cached);
+              pages.push(...copy.pages);
+              if (!first) first = copy;
+              return;
+            }
             const layAmud = (f: number) =>
               this.paginateRavText(
                 title,
@@ -517,7 +570,7 @@ export class PaginationEngine {
                 rulesConfig,
                 f === 1 ? designSettings : scaleTalmudTextSizes(designSettings, f),
                 gi === 0,
-                pages.length,
+                amudParity,
                 true
               );
             // A Vilna amud is ONE page. An amud a little longer than the
@@ -532,11 +585,15 @@ export class PaginationEngine {
               if (tighter.pages.length <= 1) break;
             }
 
-            for (const pg of part.pages) pg.amudKey = g.key;
+            part.pages.forEach((pg, k) => {
+              pg.amudKey = g.key;
+              pg.amudPageIdx = k;
+            });
+            rememberAmudLayout(cacheKey, part);
             pages.push(...part.pages);
             if (!first) first = part;
           });
-          doc = { ...first!, pages, totalPages: pages.length };
+          doc = first ? { ...(first as BookTypesetDocument), pages, totalPages: pages.length } : this.paginateRavText(title, layoutType, [], geometry, contentWidth, contentHeight, effectiveSourceFontSize, effectiveCommentaryFontSize, kneeSettings, enableOrnaments, [], [], [], rulesConfig, designSettings);
           break;
         }
         doc = this.paginateRavText(
@@ -870,6 +927,8 @@ export class PaginationEngine {
       (runningHeaderCfg?.fontFamily ?? '').trim() || effectiveSourceFontFamily || 'Frank Ruhl Libre';
     let lastPerek: PerekInfo | undefined;
 
+    // the masechta's first amud (opening frame) — from the whole book, not a worker's share
+    const firstAmudKey = talmudFolio ? (splitTalmudIntoAmudim(units)?.[0]?.key ?? null) : null;
     for (let pIdx = 0; pIdx < doc.pages.length; pIdx++) {
       const pg = doc.pages[pIdx];
       pg.pageIndex = pIdx;
@@ -878,14 +937,18 @@ export class PaginationEngine {
       if (!pg.isTitlePage && !pg.isImageOnlyPage) {
         const bIdx = bodyPageCounter++;
         pg.bodyPageIndex = bIdx;
+        // Talmud amud pages: recto / verso from the amud (and the page
+        // within it), so a share laid out in another worker mirrors right.
+        const amudBase = pg.amudKey ? bodyIndexOfAmud(pg.amudKey, designSettings?.pageElements?.folioNumbering?.startDaf ?? 2, designSettings?.pageElements?.folioNumbering?.startAmud ?? 'a') : null;
+        const sideIdx = amudBase !== null ? amudBase + (pg.amudPageIdx ?? 0) : bIdx;
         // Layout training T3.1 — mirrored margins for a right-bound book:
         // recto (even body index, left-hand page) has the outside margin
         // on its left; verso has the inside margin on its left.
         const mirrorOn = designSettings?.pageLayout?.mirrorMargins !== false;
         pg.geometry = {
           ...pg.geometry,
-          isVerso: bIdx % 2 === 1,
-          textLeftPt: mirrorOn && bIdx % 2 === 0 ? pg.geometry.marginOutside : pg.geometry.marginInside,
+          isVerso: sideIdx % 2 === 1,
+          textLeftPt: mirrorOn && sideIdx % 2 === 0 ? pg.geometry.marginOutside : pg.geometry.marginInside,
         };
         // One amud per page: the folio is the amud's own (from its דף heading).
         const fnCfg = designSettings?.pageElements?.folioNumbering;
@@ -893,7 +956,7 @@ export class PaginationEngine {
         const folioInfo = formatBodyFolioLabel(amudIdx ?? bIdx, layoutType, designSettings?.pageElements, talmudFolio);
         pg.folioDisplay = folioInfo.folioDisplay;
         pg.pageNumberHebrew = folioInfo.folioDisplay;
-        const spreadSide = spreadSideForPageIndex(bIdx);
+        const spreadSide = spreadSideForPageIndex(sideIdx);
         pg.structuredHeaders = formatVilnaRunningHeader(
           designSettings?.pageElements?.runningHeader,
           spreadSide,
@@ -1075,7 +1138,7 @@ export class PaginationEngine {
             };
           }
         }
-        if (talmudFolio && (bIdx === 0 || isChapterStartPage) && openCfg.enabled && openCfg.styleId !== 'none' && !pg.openingWordBox && pg.sourceLines.length > 0) {
+        if (talmudFolio && ((pg.amudKey ? pg.amudKey === firstAmudKey && (pg.amudPageIdx ?? 0) === 0 : bIdx === 0) || isChapterStartPage) && openCfg.enabled && openCfg.styleId !== 'none' && !pg.openingWordBox && pg.sourceLines.length > 0) {
           if (isChapterStartPage && firstSourceUnitId) emittedChapterStartUnitIds.add(firstSourceUnitId);
           const anchorLine =
             (isChapterStartPage
