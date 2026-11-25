@@ -582,32 +582,31 @@ export const CHASSIDIC_DRUSH_RECIPE: LayoutRecipe = {
     name: 'Chassidic Drush',
     nameHe: 'דרוש חסידי',
     description:
-      'Chassidic drush page: a single running column of sermonic prose with centred section headings and a narrow outer-margin strip for glosses and source notes.',
-    descriptionHe: 'דף דרוש חסידי: טור יחיד רץ של פרוזה דרשנית עם כותרות פרקים ממורכזות ורצועת שוליים צרה בצד החיצוני לגלוסות ולהערות מקור.',
+      'Chassidic sefer (Kedushat Levi, Noam Elimelech, Me\u2019or Einayim …) in two justified columns: body in Rashi script, each paragraph opening with bold square-letter words, no first-line indent, parsha / section headings centred inside the column, Hebrew-letter folio.',
+    descriptionHe: 'ספר חסידות (קדושת לוי, נועם אלימלך, מאור עינים …) בשני טורים מיושרים: גוף הטקסט בכתב רש״י, כל מאמר פותח במילים מודגשות באותיות מרובעות, ללא הזחה, כותרות פרשה ומאמר ממורכזות בתוך הטור, מספור דפים באותיות.',
     genre: ['chassidut', 'drush', 'prose'],
-    origin: 'Traditional Chassidic drush editions (single-column prose)',
+    origin: 'Traditional Chassidic editions in two columns (Kedushat Levi, Berditchev / Lemberg prints)',
   },
   regions: [
-    rect('header', 0, 0, 100, 5, { labelHe: 'כותרת — דרוש', labelEn: 'Header — drush' }),
-    rect('drush', 0, 6, 90, 82, {
-      labelHe: 'דרוש',
-      labelEn: 'Drush',
+    rect('header', 0, 0, 100, 5, { labelHe: 'כותרת — ספר · פרשה', labelEn: 'Header — book · parsha' }),
+    rect('main_text', 0, 6, 100, 82, {
+      labelHe: 'דרוש (שני טורים)',
+      labelEn: 'Drush (two columns)',
       fontSizePt: 13.5,
-      lineHeight: 1.35,
+      lineHeight: 1.3,
     }),
-    rect('marginal', 92, 6, 8, 82, {
-      side: 'outside',
-      labelHe: 'הערות ומקורות',
-      labelEn: 'Notes and sources',
+    rect('footnote', 0, 89, 100, 9, {
+      labelHe: 'הערות',
+      labelEn: 'Notes',
       fontSizePt: 9,
       lineHeight: 1.25,
     }),
   ],
   flow: [
-    { parentTier: 'drush', childTier: 'marginal', anchor: 'none', overflow: 'outer-margin' },
+    { parentTier: 'main_text', childTier: 'footnote', anchor: 'heading', overflow: 'next-folio' },
   ],
   typography: {
-    indentation: { mode: 'first-line', amountPt: 12 },
+    indentation: { mode: 'none', amountPt: 0 },
     justification: { expansion: 'kashya' },
     mainFontSizePt: 13.5,
     commentaryFontSizePt: 9,
@@ -616,7 +615,7 @@ export const CHASSIDIC_DRUSH_RECIPE: LayoutRecipe = {
   headerFooter: {
     invocation: 'בס״ד',
     chapterBanner: true,
-    folioStyle: 'numbers',
+    folioStyle: 'hebrew-letters',
     folioPosition: 'outer-top',
   },
   page: {
@@ -627,7 +626,7 @@ export const CHASSIDIC_DRUSH_RECIPE: LayoutRecipe = {
     marginInsideMm: 12,
     marginOutsideMm: 12,
   },
-  baseLayout: 'single_column',
+  baseLayout: 'two_column',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2619,7 +2618,7 @@ export const HISTORICAL_RECIPE_RULES: Record<string, string[]> = {
   'mikraot-gedolot': ['Verse + Targum Onkelos on top', 'Commentary tiers below, up to 6 (Rashi, Ibn Ezra, Ramban, Sforno, …)', 'Tier grid balanced with gutter scaling', 'Taamim preserved on verses'],
   'shulchan-aruch': ['Siman / seif central text', 'Commentary columns around it (Magen Avraham, Taz, Mishnah Berurah, …)', 'Each commentary column has its own running header'],
   responsa: ['Question (she\'elah) then answer (teshuvah)', 'Siman banner at the top', 'Single running column'],
-  'chassidic-drush': ['Single column of sermonic prose', 'Centred headings', 'Decorative Shaar Blatt border on the title page'],
+  'chassidic-drush': ['Two justified columns', 'Body in Rashi script; opening words bold, square letters', 'No first-line indent', 'Parsha / section headings centred inside the column', 'Hebrew-letter folio'],
   'yiddish-sefer': ['Hebrew source facing Yiddish text', 'Yiddish digraphs (װ ױ ײ) preserved', 'Tzenerene (Tzena Urena) structure'],
   'machon-edition': ['Clean modern single column', 'Running headers with chapter titles', 'Footnotes at the bottom of the page'],
   // v0.9.3 Part C — rules for the 18 new recipes (RESEARCH-NOTE.md).

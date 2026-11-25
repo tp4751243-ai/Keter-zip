@@ -1156,9 +1156,33 @@ export function applyGenreTypography(recipeId: string, settings: ProfessionalDes
       break;
     // First-line indents: responsa / mussar / tanya / kitzur / aruch
     // (and chassidic drush, sermonic prose like mussar).
+    // Chassidic sefer in two columns — the user's Kedushat Levi prints
+    // (Berditchev / Lemberg editions): body in Rashi script, each
+    // paragraph opening with its first words in bold square letters,
+    // no first-line indent, two justified columns, parsha and section
+    // headings centred inside the column, folio in Hebrew letters.
+    case 'chassidic-drush': {
+      noIndentMain();
+      justifyMain();
+      kashya();
+      centerChapter();
+      folioHebrew();
+      const bodyPt = DesignSettingsEngine.resolveStyle(next, { role: 'main_source' }).character.fontSizePt;
+      next = DesignSettingsEngine.updateRoleCharacterStyle(next, 'main_source', { fontFamily: 'Noto Rashi Hebrew' }, 'ai');
+      next = DesignSettingsEngine.updateRoleParagraphStyle(
+        next,
+        'main_source',
+        { openingWordsFontFamily: 'Frank Ruhl Libre', openingWordsScale: 1.3, spaceBeforePt: 0, spaceAfterPt: 0 },
+        'ai'
+      );
+      next = DesignSettingsEngine.updateRoleCharacterStyle(next, 'heading', { fontFamily: 'Frank Ruhl Libre', isBold: true, fontSizePt: Math.round(bodyPt * 1.35 * 10) / 10, textColor: '#1E1B18' }, 'ai');
+      next = DesignSettingsEngine.updateRoleParagraphStyle(next, 'heading', { alignment: 'center', spaceBeforePt: Math.round(bodyPt * 0.6), spaceAfterPt: Math.round(bodyPt * 0.3) }, 'ai');
+      next = DesignSettingsEngine.updateColumnSettings(next, { columnCount: 2, columnGapPt: 12, headingsInColumn: true }, 'ai');
+      next = DesignSettingsEngine.updatePageElementsSettings(next, { catchword: true }, 'ai');
+      break;
+    }
     case 'mussar':
     case 'tanya':
-    case 'chassidic-drush':
     case 'aruch-hashulchan':
     case 'kitzur-shulchan-aruch':
     case 'responsa':
@@ -1166,7 +1190,7 @@ export function applyGenreTypography(recipeId: string, settings: ProfessionalDes
       justifyMain();
       kashya();
       centerChapter();
-      if (recipeId !== 'responsa' && recipeId !== 'chassidic-drush') folioHebrew();
+      if (recipeId !== 'responsa') folioHebrew();
       break;
     // Tur: code text no indent, Bach / Drishah / Prishah flanks
     // second-line (same shape as the Shas/MB/Rambam/Mishnah group).

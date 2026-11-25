@@ -1614,7 +1614,12 @@ export default function App() {
         : pendingRecipeId
           ? seferTypeForRecipe(pendingRecipeId)
           : pendingExplicitLayout
-            ? seferTypeForLayout(pendingExplicitLayout)
+            ? // a two-column card chooses the LAYOUT, not the book type: a
+              // Chassidic or Mussar sefer stays prose in two columns (it was
+              // forced to the Shulchan Aruch recipe as "halacha")
+              pendingExplicitLayout === 'two_column'
+              ? undefined
+              : seferTypeForLayout(pendingExplicitLayout)
             : chosen
               ? undefined
               : designSettings?.pageLayout?.seferType;

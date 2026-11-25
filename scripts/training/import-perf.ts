@@ -245,6 +245,24 @@ async function main() {
       const g0 = doc.pages[1]?.sourceLines[3]?.words.find(w => !w.isSpace);
       console.log('SIZE sample glyph', JSON.stringify(g0?.glyphs?.[0]));
     }
+    if (process.env.FILL_DUMP) {
+      const fills: Array<[number, number, string]> = [];
+      body.forEach((pg, i) => {
+        const ls = [...pg.sourceLines, ...(pg.column2Lines ?? []), ...pg.footnoteLines];
+        const ch = pg.geometry.pageHeight - pg.geometry.marginTop - pg.geometry.marginBottom;
+        const bottom = ls.length ? Math.max(...ls.map(l => l.yBaseline)) : 0;
+        const nextHead = body[i + 1]?.sourceLines.find(l => l.role === 'heading' || l.role === 'chapter');
+        fills.push([i, Math.round((bottom / ch) * 100), nextHead ? 'next-heading' : '']);
+      });
+      const low = fills.filter(f => f[1] < 80);
+      console.log('FILL pages', fills.length, 'under 80%:', low.length, 'of which before a heading page:', low.filter(f => f[2]).length, 'examples', JSON.stringify(low.slice(0, 15)));
+      const pg = body[Number(process.env.FILL_DUMP)];
+      if (pg) console.log('FILL page', process.env.FILL_DUMP, 'src', pg.sourceLines.length, 'col2', pg.column2Lines?.length, JSON.stringify([...pg.sourceLines, ...(pg.column2Lines ?? [])].map(l => [l.role[0], Math.round(l.yBaseline), Math.round(l.xLeft ?? -1)]).slice(0, 80)));
+    }
+    if (process.env.FIND_HEADING) {
+      const i = body.findIndex(pg => [...pg.sourceLines, ...(pg.column2Lines ?? [])].some(l => l.role === 'heading' && l.words.map(w => w.text).join(' ').includes(process.env.FIND_HEADING!)));
+      console.log('FIND_HEADING', process.env.FIND_HEADING, 'on body page', i);
+    }
     if (process.env.LINE_DUMP) {
       const plan = PdfExporter.buildPageRenderPlan(body[Number(process.env.LINE_DUMP)]);
       for (const l of [...plan.lines].sort((a, b) => a.yBaseline - b.yBaseline)) {

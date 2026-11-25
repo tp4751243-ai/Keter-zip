@@ -488,6 +488,9 @@ export function classifyDocument(
   else if (isYiddish) genreHint = 'yiddish';
   else if (tierCounts.rashi_inner > 0 && tierCounts.tosafot_outer > 0) genreHint = 'talmud';
   else if (verseUnits > 0 && authors.length >= 2) genreHint = 'tanakh';
+  // many Chassidic markers outweigh a few halachic quotes (a drush sefer
+  // cites the Shulchan Aruch; a Shulchan Aruch is not Chassidic)
+  else if (chassidicHits >= 5 && chassidicHits >= 2 * shulchanAruchHits && simanUnits === 0) genreHint = 'chassidic';
   else if (shulchanAruchHits > 0 || simanUnits > 0) genreHint = 'halacha';
   else if (responsaHits > 0) genreHint = 'responsa';
   else if (chassidicHits > 0) genreHint = 'chassidic';
@@ -821,14 +824,21 @@ function scoreRecipes(c: DocumentClassification): ScoredRecipe[] {
     // Layout training T6 — Rashi + a main text with dibburim is just as
     // true of a Chumash; only Gemara evidence (Tosafot, מתני׳/גמ׳, Talmud
     // phrasing) earns the full Vilna score.
-    const talmudEvidence = t.tosafot_outer > 0 || (c.markers.talmudUnits ?? 0) > 0 || t.mishna > 0;
+    // Gemara phrasing must run through the text: a drush sefer QUOTES the
+    // Gemara ("תנו רבנן", "גמ׳") in a few paragraphs out of hundreds
+    // (Kedushat Levi: 23 of 1,469) — that is not a tractate.
+    const mainCount = Math.max(1, c.roles.main_source ?? 0);
+    const talmudDense = (c.markers.talmudUnits ?? 0) >= 3 && (c.markers.talmudUnits ?? 0) >= mainCount * 0.1;
+    const talmudEvidence = t.tosafot_outer > 0 || talmudDense || t.mishna > 0 || (c.markers.dafHeadings ?? 0) >= 2;
     if (t.rashi_inner > 0) {
       s += talmudEvidence ? 3 : 1;
       r.push('Rashi detected (inner commentary)');
       rh.push('זוהה רש״י');
     }
     if (t.tosafot_outer > 0) { s += 3; r.push('Tosafot detected (outer commentary)'); rh.push('זוהו תוספות'); }
-    if ((c.markers.talmudUnits ?? 0) > 0) { s += 2; r.push('Gemara phrasing (מתני׳ / גמ׳ / תנו רבנן …)'); rh.push('זוהה לשון גמרא'); }
+    if (talmudDense) { s += 2; r.push('Gemara phrasing (מתני׳ / גמ׳ / תנו רבנן …)'); rh.push('זוהה לשון גמרא'); }
+    // a single prose file with no Talmud evidence at all is not a daf
+    if (!talmudEvidence && t.rashi_inner === 0) s = Math.min(s, 2);
     if ((c.markers.torahBook ?? 0) > 0 || (c.markers.sofPasukUnits ?? 0) >= 2) s = Math.max(0, s - 4);
     if (t.mishna > 0) { s += 2; r.push('Mishna block detected'); rh.push('זוהתה משנה'); }
     if (t.gemara > 0 && c.hasDibbur && talmudEvidence) { s += 2; r.push('Gemara with linked dibbur hamatchil'); rh.push('זוהתה גמרא עם דיבור המתחיל'); }
@@ -852,7 +862,11 @@ function scoreRecipes(c: DocumentClassification): ScoredRecipe[] {
     if ((c.roles.verse ?? 0) > 0 || c.markers.taamimUnits >= 2) { s += 3; r.push('verse (pasuk) units detected'); rh.push('זוהו פסוקים'); }
     if (c.commentaryAuthors.includes('Onkelos')) { s += 2; r.push('Targum Onkelos detected'); rh.push('זוהה תרגום אונקלוס'); }
     // Layout training T6 — Chumash evidence beyond taamim.
-    if ((c.markers.torahBook ?? 0) > 0) { s += 5; r.push('Torah book / parsha name detected'); rh.push('זוהה שם ספר / פרשה בתורה'); }
+    // Parsha headings alone are just as true of a drush sefer on the Torah
+    // (Kedushat Levi, Noam Elimelech …): a Chumash also has pesukim,
+    // taamim, verse units or meforshim.
+    const chumashText = (c.roles.verse ?? 0) > 0 || c.markers.taamimUnits >= 2 || (c.markers.sofPasukUnits ?? 0) >= 2 || c.commentaryCount > 0 || (c.roles.primary_comment ?? 0) + (c.roles.secondary_comment ?? 0) > 0;
+    if ((c.markers.torahBook ?? 0) > 0) { s += chumashText ? 5 : 1; r.push('Torah book / parsha name detected'); rh.push('זוהה שם ספר / פרשה בתורה'); }
     if ((c.markers.sofPasukUnits ?? 0) >= 2) { s += 3; r.push('pesukim (sof pasuk) detected'); rh.push('זוהו פסוקים (סוף פסוק)'); }
     if ((c.markers.vocalizedSourceUnits ?? 0) >= 2 && t.rashi_inner > 0 && (c.markers.talmudUnits ?? 0) === 0) {
       s += 2;

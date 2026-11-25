@@ -262,3 +262,34 @@ export function resolveMasechetName(
 export function defaultVilnaHeaderSizePt(gemaraSizePt: number): number {
   return Math.round(gemaraSizePt * 1.3 * 10) / 10;
 }
+
+/**
+ * Catchword (custos) — the first word of the next page, printed at the
+ * foot of the page under the left column, as in the old prints (the
+ * user's Kedushat Levi editions). Returned as a head item, so every
+ * renderer that draws the running head draws it too.
+ */
+export function layoutCatchword(
+  page: PageTypesetResult,
+  word: string,
+  fontFamily: string,
+  fontSizePt: number
+): VilnaHeaderItem | null {
+  const text = word.trim();
+  if (!text) return null;
+  const g = page.geometry;
+  const left = textBlockLeft(g);
+  const shaper = new HarfBuzzShaperEngine(fontSizePt, fontFamily, 400);
+  const w = measure(shaper, text, false);
+  const yBaseline = g.pageHeight - g.marginBottom + Math.max(fontSizePt * 1.25, Math.min(g.marginBottom * 0.55, fontSizePt * 2));
+  return {
+    kind: 'title',
+    words: [{ text, xLeft: left, xRight: left + w }],
+    xLeft: left,
+    xRight: left + w,
+    yBaseline,
+    fontSizePt,
+    fontWeight: 400,
+    fontFamily,
+  };
+}

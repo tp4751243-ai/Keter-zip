@@ -43,6 +43,8 @@ jobs:
         run: npx tsx scripts/training/word-rtl-test.ts
       - name: Word import picks the right sefer type (Chumash is never a Gemara)
         run: npx tsx scripts/training/import-classifier-test.ts
+      - name: Two-column Chassidic sefer (Kedushat Levi prints)
+        run: npx tsx scripts/training/two-column-sefer-test.ts
       - name: Talmud amud pages (each דף heading starts a page; Vilna page shape)
         run: npx tsx scripts/training/amud-page-test.ts
       - name: Mikraot Gedolot page rules (Devarim 1–2)

@@ -2532,7 +2532,8 @@ export class PdfExporter {
     }
 
     // 4. Layout-Specific Decorative Rules (Two-Column / Top-Bottom)
-    if (layoutType === 'two_column' && column2Lines && column2Lines.length > 0) {
+    // two columns: no rule between them (no lines on the page)
+    if ((page.designSettings?.columns as { columnRule?: boolean } | undefined)?.columnRule === true && layoutType === 'two_column' && column2Lines && column2Lines.length > 0) {
       const colGutter = page.designSettings?.columns?.columnGapPt ?? 16.0;
       const colW = (contentW - colGutter) / 2.0;
       ctx.strokeStyle = '#D8CFC2';
@@ -2995,7 +2996,8 @@ export class PdfExporter {
     }
 
     // 4. Layout-Specific Decorative Vector Rules (Two-Column / Top-Bottom)
-    if (layoutType === 'two_column' && column2Lines && column2Lines.length > 0) {
+    // two columns: no rule between them (no lines on the page)
+    if ((page.designSettings?.columns as { columnRule?: boolean } | undefined)?.columnRule === true && layoutType === 'two_column' && column2Lines && column2Lines.length > 0) {
       const colGutter = page.designSettings?.columns?.columnGapPt ?? 16.0;
       const colW = (contentW - colGutter) / 2.0;
       const divX = mRight - colW - colGutter / 2;

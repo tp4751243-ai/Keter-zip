@@ -184,6 +184,14 @@ export interface ParagraphStyleSettings {
    * bold (the פתיח of a prose sefer: "יסוד החסידות…"). 0 / absent = off.
    */
   openingWordsBold?: number;
+  /**
+   * Two-column Chassidic sefer (the user's Kedushat Levi prints): the
+   * paragraph's opening words (its leading bold words, or the first
+   * `openingWordsBold`) are set in this face — square letters while the
+   * body is Rashi script — and this much larger.
+   */
+  openingWordsFontFamily?: string;
+  openingWordsScale?: number;
   justifyNonFinalLines: boolean;
   hyphenation: 'none' | 'hebrew_maqaf' | 'standard';
   keepWithNext: boolean;
@@ -457,12 +465,20 @@ export interface ColumnDesignSettings {
   columnGapPt: number;
   minColumnWidthPt: number;
   balanceColumns: boolean;
+  /**
+   * Two-column Chassidic sefer (Kedushat Levi prints): section / parsha
+   * headings sit inside their column (centred) and the text flows on; only
+   * the book title spans. Off: headings span both columns (Mesilat Yesharim).
+   */
+  headingsInColumn?: boolean;
 }
 
 export interface PageElementsDesignSettings {
   showRunningHeader: boolean;
   showFolioNumber: boolean;
   showDecorativeFrame: boolean;
+  /** Catchword (custos): the next page's first word at the foot of the page (old prints). */
+  catchword?: boolean;
   runningHeaderFontSizePt: number;
   folioNumberPosition: HeaderFolioPosition;
   /** v0.3.0 (Module C) — running-header placement; defaults to the folio position when unset. */

@@ -373,6 +373,7 @@ export const EN_STRINGS: Record<string, string> = {
 "שוה פרוטה": "Worth a prutah",
 "שולחן ערוך": "Shulchan Arukh",
 "שולחן ערוך / משניות / סידור בשני טורים": "Shulchan Arukh / Mishnayot / Siddur in two columns",
+"ספרי חסידות ומוסר / שולחן ערוך / משניות בשני טורים": "Chassidut & Mussar sefarim / Shulchan Arukh / Mishnayot in two columns",
 "שולחן ערוך — אורח חיים סימן א׳": "Shulchan Arukh — Orach Chaim, Siman 1",
 "שולחן ערוך — סימן א׳": "Shulchan Arukh — Siman 1",
 "שוליים חיצוניים": "Outer margins",

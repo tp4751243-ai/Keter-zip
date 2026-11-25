@@ -413,12 +413,14 @@ export class DocxImporter {
               unitLanguage = 'yi';
               shasStyleName = 'Tzenerene Parsha Heading';
             }
-          } else if (styleVal.includes('heading 2') || text.startsWith('סימן ') || text.startsWith('סִימָן ')) {
+          } else if (styleVal.includes('heading 2') || ((text.startsWith('סימן ') || text.startsWith('סִימָן ')) && text.trim().split(/\s+/).length <= 10)) {
             role = 'siman';
             hierarchyLevel = 2;
           } else if (styleVal.includes('heading') || styleVal.includes('subheading')) {
             role = 'heading';
-            hierarchyLevel = 2;
+            // keep Word's level (Heading 2 = parsha, Heading 3 = section)
+            const lvl = /heading\s*(\d)/.exec(styleVal);
+            hierarchyLevel = lvl ? Math.max(2, Number(lvl[1])) : 2;
             // v0.8.0 Part D — a Yiddish heading (e.g. a Tzenerene /
             // parsha heading carrying a Heading style) is classified by
             // the Yiddish classifier: a parsha heading becomes a chapter,
@@ -455,7 +457,13 @@ export class DocxImporter {
             yiddishKind = yid.yiddishKind;
             unitLanguage = yid.language;
             hierarchyLevel = yid.role === 'main_source' ? 2 : 3;
-          } else if (styleVal.includes('rashi') || text.startsWith('רש"י') || text.startsWith('רַשִׁ"י') || text.includes('ד"ה')) {
+          } else if (
+            styleVal.includes('rashi') || text.startsWith('רש"י') || text.startsWith('רַשִׁ"י') ||
+            // a dibbur heading (ד"ה) near the START marks a commentary
+            // paragraph; drush that QUOTES "תוספות ד"ה …" mid-paragraph is
+            // body text (Kedushat Levi import)
+            /^\S*\s*\S*\s*ד"ה/.test(text.trim())
+          ) {
             role = 'primary_comment';
             hierarchyLevel = 3;
           } else if (styleVal.includes('tosafot') || text.startsWith('תוספות') || text.startsWith('תּוֹסָפוֹת')) {

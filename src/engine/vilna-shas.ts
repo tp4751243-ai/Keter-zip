@@ -986,13 +986,17 @@ export function classifyShasParagraph(
 ): { role: ContentRole; styleName: string } | null {
   const style = (styleVal || '').toLowerCase();
   const t = text.trim();
+  // A running head or a margin reference is SHORT; a body paragraph that
+  // merely opens with "מסכת ברכות דף ד׳…" or "עיין…" (common in drush) is
+  // body text, not a header or a note (Kedushat Levi import).
+  const words = t.split(/\s+/).filter(Boolean).length;
   if (style.includes('mishna') || t.startsWith('משנה') || t.startsWith('מִשְׁנָה')) {
     return { role: 'main_source', styleName: 'Mishna' };
   }
   // v0.9.0 Part C — header band: daf/folio number or running header.
   if (
     style.includes('folio') || style.includes('running header') || style.includes('header') ||
-    /^(דף\s+[א-ת]+[׳״]?\s*[אב]?\s*\.?|מסכת\s+\S+\s+דף\s+[א-ת])/.test(t)
+    (words <= 12 && /^(דף\s+[א-ת]+[׳״]?\s*[אב]?\s*\.?|מסכת\s+\S+\s+דף\s+[א-ת])/.test(t))
   ) {
     return { role: 'page_element', styleName: 'Running Header / Folio' };
   }
@@ -1046,7 +1050,7 @@ export function classifyShasParagraph(
   if (/^(אונקלוס|תרגום אונקלוס)/.test(t) || style.includes('onkelos')) {
     return { role: 'primary_comment', styleName: 'Onkelos' };
   }
-  if (/^(מראה מקום|מראי מקום|עיין|עי׳)/.test(t) || style.includes('cross_reference') || style.includes('marginal')) {
+  if ((words <= 30 && /^(מראה מקום|מראי מקום|עיין|עי׳)/.test(t)) || style.includes('cross_reference') || style.includes('marginal')) {
     return { role: 'cross_reference', styleName: 'Marginal reference' };
   }
   return null;

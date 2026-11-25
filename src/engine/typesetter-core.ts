@@ -160,9 +160,15 @@ export class TypesetterEngine {
     // (engines that size and set fonts themselves, e.g. Mikraot Gedolot).
     const baseFamily = this.shaper.getFontFamily();
     // Layout training T8 — the paragraph's opening word(s) bold (prose פתיח).
-    const openingBold = this.designSettings
-      ? Math.max(0, Math.floor(DesignSettingsEngine.resolveRoleAndUnitStyle(this.designSettings, unit.role, unit.id).paragraph?.openingWordsBold ?? 0))
-      : 0;
+    const paraStyle = this.designSettings
+      ? DesignSettingsEngine.resolveRoleAndUnitStyle(this.designSettings, unit.role, unit.id).paragraph
+      : undefined;
+    const openingBold = Math.max(0, Math.floor(paraStyle?.openingWordsBold ?? 0));
+    // the paragraph's opening words: its leading bold run(s) (at most 8
+    // words), or the first `openingWordsBold`
+    const openingFace = paraStyle?.openingWordsFontFamily;
+    const openingScale = paraStyle?.openingWordsScale ?? 1;
+    let inOpening = true;
 
     for (const run of runs) {
       // Punctuation typed after a space ("כב א) :") stays on its word —
@@ -222,6 +228,13 @@ export class TypesetterEngine {
         const effectiveIsBold = resolvedChar
           ? Boolean(resolvedChar.isBold || (!run.isDibbur && run.isBold) || globalWordIndex < openingBold)
           : Boolean(run.isBold || run.isDibbur);
+        if (inOpening && (!effectiveIsBold || globalWordIndex >= 8)) inOpening = false;
+        if (inOpening && openingFace && (run.isBold || globalWordIndex < openingBold)) {
+          runFontFamily = openingFace;
+          if (runFontSizePt && openingScale !== 1) runFontSizePt = Number((runFontSizePt * openingScale).toFixed(2));
+          this.shaper.setFontFamily(runFontFamily);
+          if (runFontSizePt) this.shaper.setFontSize(runFontSizePt);
+        }
 
         const shaped = this.shaper.shapeWord(token, {
           isBold: effectiveIsBold,

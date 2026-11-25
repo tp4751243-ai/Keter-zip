@@ -3013,17 +3013,8 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({
                     </g>
                   )}
 
-                {/* 2. Two-Column Vertical Divider */}
-                {layoutType === 'two_column' && (
-                  <line
-                    x1={contentW / 2}
-                    y1={0}
-                    x2={contentW / 2}
-                    y2={contentH * 0.88}
-                    stroke="#A39B8B"
-                    strokeWidth={1 * scale}
-                  />
-                )}
+                {/* 2. Two columns: no rule between them (the old prints have
+                    none; no lines on the page anywhere). */}
 
                 {/* 3. Top-Source / Bottom-Commentary Horizontal Divider */}
                 {layoutType === 'source_top_commentary_bottom' && dividerY && (

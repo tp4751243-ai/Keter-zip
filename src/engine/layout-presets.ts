@@ -57,8 +57,8 @@ export const LAYOUT_PRESET_OPTIONS: ReadonlyArray<LayoutPresetOption> =
       id: 'two_column',
       labelHe: 'שני טורים מאוזנים',
       labelEn: 'Two balanced columns',
-      subLabelHe: 'שולחן ערוך / משניות / סידור בשני טורים',
-      subLabelEn: 'Shulchan Arukh / Mishnayot / Siddur in two columns',
+      subLabelHe: 'ספרי חסידות ומוסר / שולחן ערוך / משניות בשני טורים',
+      subLabelEn: 'Chassidut & Mussar sefarim / Shulchan Arukh / Mishnayot in two columns',
     },
     {
       id: 'single_column',
@@ -189,8 +189,8 @@ export const CORE_START_LAYOUTS: ReadonlyArray<CoreStartLayoutOption> =
       baseLayout: 'two_column',
       labelHe: 'שני טורים מאוזנים',
       labelEn: 'Two balanced columns',
-      subLabelHe: 'שולחן ערוך / משניות / סידור בשני טורים',
-      subLabelEn: 'Shulchan Arukh / Mishnayot / Siddur in two columns',
+      subLabelHe: 'ספרי חסידות ומוסר / שולחן ערוך / משניות בשני טורים',
+      subLabelEn: 'Chassidut & Mussar sefarim / Shulchan Arukh / Mishnayot in two columns',
     },
     {
       kind: 'base',

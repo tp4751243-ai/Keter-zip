@@ -43,6 +43,7 @@ import type { TypesettingRulesConfig } from './typesetting-rules-engine';
 import { TypesetterEngine } from './typesetter-core';
 
 const SPANNING_ROLES = new Set(['main_title', 'subtitle', 'chapter', 'heading']);
+const isHeadLine = (l: TypesetLine) => l.role === 'heading' || l.role === 'chapter' || l.role === 'subtitle' || l.role === 'main_title';
 
 export interface ProseColumnsInput {
   title: string;
@@ -88,18 +89,31 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
   }
   const fnHeight = (ls: TypesetLine[]) => ls.reduce((s, l) => s + (l.leadingPt || fnLeading), 0);
 
+  // Two-column Chassidic sefer (the user's Kedushat Levi prints): section
+  // and parsha headings sit INSIDE their column, centred, and the text
+  // flows on in the same column; only the book title spans the page.
+  const headingsInColumn = (designSettings?.columns as { headingsInColumn?: boolean } | undefined)?.headingsInColumn === true;
+  const plain = (t: string) => t.replace(/[֑-ׇ]/g, '').replace(/\s+/g, ' ').trim();
   // Items: spanning blocks and column runs, in reading order.
   const items: Item[] = [];
   const chapterOfUnit = new Map<string, string>();
   let chapter = '';
+  let prevHeadingText = '';
   for (const u of input.units) {
     if (u.role === 'footnote' || !u.rawText?.trim()) continue;
-    const spanning = SPANNING_ROLES.has(u.role);
+    const isHead = u.role === 'heading' || u.role === 'chapter' || u.role === 'subtitle' || u.role === 'main_title';
+    // the same heading twice in a row (Word: "Heading 2 בראשית" then
+    // "Heading 3 בראשית") is printed once
+    if (isHead && plain(u.rawText) === prevHeadingText) continue;
+    prevHeadingText = isHead ? plain(u.rawText) : '';
+    const spanning = SPANNING_ROLES.has(u.role) && !(headingsInColumn && (u.role === 'heading' || u.role === 'subtitle'));
     if (u.role === 'chapter') chapter = u.rawText.replace(/[֑-ׇ]/g, '').trim();
+    // the running head follows the parsha (a top-level heading)
+    if (headingsInColumn && u.role === 'heading' && (u.hierarchyLevel ?? 2) <= 2) chapter = plain(u.rawText);
     chapterOfUnit.set(u.id, chapter);
     const lines = engine.typesetContentUnit(u, spanning ? contentW : colW, undefined, !spanning);
     if (!lines.length) continue;
-    if (spanning) {
+    if (spanning || (headingsInColumn && isHead)) {
       for (const l of lines) {
         l.alignment = 'center';
         l.paragraphAlignment = 'center';
@@ -214,6 +228,7 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
         }
         // widow / orphan: nudge the split by one line when it helps
         const bad = (k: number) =>
+          (k > 0 && k < rest.length && isHeadLine(rest[k - 1])) || // heading at col foot
           (k > 0 && k < rest.length && startUnit(k - 1) && !startUnit(k)) || // orphan at col foot
           (k < rest.length && k > 0 && !startUnit(k) && (k + 1 === rest.length || startUnit(k + 1))); // widow at col head
         let k = best.k;
@@ -250,6 +265,8 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
           return k;
         };
         let kR = fill(0, () => roomFor(1));
+        // a heading never ends a column: it moves with its text
+        while (kR > 1 && kR < rest.length && isHeadLine(rest[kR - 1])) kR--;
         // orphan at the right column foot → move it over
         if (kR > 1 && kR < rest.length && startUnit(kR - 1) && !startUnit(kR)) kR--;
         // widow at the left column head → pull one more line back
@@ -262,6 +279,7 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
             kL++;
           }
         }
+        while (kL > kR + 1 && kL < rest.length && isHeadLine(rest[kL - 1])) kL--;
         if (kL > kR + 1 && kL < rest.length && startUnit(kL - 1) && !startUnit(kL)) kL--;
         if (kL > kR + 2 && kL < rest.length && !startUnit(kL) && (kL + 1 === rest.length || startUnit(kL + 1))) kL--;
         if (kR === 0 && y > 0) {

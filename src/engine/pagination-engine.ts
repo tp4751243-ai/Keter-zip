@@ -93,7 +93,7 @@ import {
 } from './vilna-marginalia';
 import { paginateMikraotGedolot, chumashHeaderParts } from './mikraot-gedolot';
 import { paginateProseColumns } from './prose-columns';
-import { derivePerakim, layoutHeaderParts, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
+import { derivePerakim, layoutCatchword, layoutHeaderParts, layoutVilnaHeader, resolveMasechetName, type PerekInfo } from './vilna-header';
 
 const PERIPHERAL_STREAM_LABELS: Record<PeripheralStreamKind, { he: string; en: string; patterns: RegExp[] }> = {
   ein_mishpat: { he: 'עין משפט', en: 'Ein Mishpat', patterns: [/עין\s*משפט/, /ein[_\s-]*mishpat/i] },
@@ -1407,6 +1407,25 @@ export class PaginationEngine {
     }
 
     doc.diagnostics = diagnostics;
+    // Catchword (custos) at the foot of each body page: the first word of
+    // the next page (the user's Kedushat Levi prints).
+    if (designSettings?.pageElements?.catchword === true && !talmudFolio) {
+      const bodyPages = doc.pages.filter(p => !p.isTitlePage && !p.isImageOnlyPage && !p.isBackOfTitle);
+      const firstWordOf = (p: PageTypesetResult): string => {
+        const ls = [...p.sourceLines, ...(p.column2Lines ?? [])].filter(l => l.words.some(w => !w.isSpace && w.text.trim()));
+        if (!ls.length) return '';
+        const right = Math.max(...ls.map(l => l.xRight ?? 0));
+        const first = ls.filter(l => Math.abs((l.xRight ?? 0) - right) < 2).sort((x, y) => x.yBaseline - y.yBaseline)[0] ?? ls[0];
+        return first.words.find(w => !w.isSpace && w.text.trim())?.text ?? '';
+      };
+      for (let i = 0; i + 1 < bodyPages.length; i++) {
+        const item = layoutCatchword(bodyPages[i], firstWordOf(bodyPages[i + 1]), effectiveRashiFontFamily || effectiveSourceFontFamily || 'Frank Ruhl Libre', Math.round(effectiveSourceFontSize * 0.75 * 10) / 10);
+        if (!item) continue;
+        const vh = bodyPages[i].vilnaHeader ?? { items: [], perekName: '', masechet: '', folio: '' };
+        bodyPages[i].vilnaHeader = { ...vh, items: [...vh.items, item] };
+      }
+    }
+
     return doc;
   }
 
