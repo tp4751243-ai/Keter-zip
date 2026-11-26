@@ -485,6 +485,8 @@ export interface PageElementsDesignSettings {
    * topic (parsha / Yom Tov) centred, the folio on the outer corner.
    */
   splitTitleHeader?: boolean;
+  /** Version of the trained two-column sefer design this book has (2: blank line between paragraphs). */
+  twoColumnSeferVersion?: number;
   /** Running-head size ÷ body size for the split-title head (default 1.3). */
   headerScale?: number;
   runningHeaderFontSizePt: number;

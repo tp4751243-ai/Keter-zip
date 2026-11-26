@@ -1176,13 +1176,14 @@ export function applyGenreTypography(recipeId: string, settings: ProfessionalDes
       next = DesignSettingsEngine.updateRoleParagraphStyle(
         next,
         'main_source',
-        { openingWordsFontFamily: 'Frank Ruhl Libre', openingWordsScale: 1.3, spaceBeforePt: 0, spaceAfterPt: 0 },
+        // a blank line between paragraphs (the user)
+        { openingWordsFontFamily: 'Frank Ruhl Libre', openingWordsScale: 1.3, spaceBeforePt: 0, spaceAfterPt: 16.5 },
         'ai'
       );
       next = DesignSettingsEngine.updateRoleCharacterStyle(next, 'heading', { fontFamily: 'Frank Ruhl Libre', isBold: true, fontSizePt: Math.round(bodyPt * 1.35 * 10) / 10, textColor: '#1E1B18' }, 'ai');
       next = DesignSettingsEngine.updateRoleParagraphStyle(next, 'heading', { alignment: 'center', spaceBeforePt: Math.round(bodyPt * 0.6), spaceAfterPt: Math.round(bodyPt * 0.3) }, 'ai');
       next = DesignSettingsEngine.updateColumnSettings(next, { columnCount: 2, columnGapPt: 12, headingsInColumn: true }, 'ai');
-      next = DesignSettingsEngine.updatePageElementsSettings(next, { catchword: true, splitTitleHeader: true, headerScale: 1.6, showRunningHeader: true }, 'ai');
+      next = DesignSettingsEngine.updatePageElementsSettings(next, { catchword: true, splitTitleHeader: true, headerScale: 1.6, showRunningHeader: true, twoColumnSeferVersion: 2 }, 'ai');
       // the head is in bold square letters (the body is Rashi script)
       if (next.pageElements.runningHeader) {
         next = DesignSettingsEngine.updatePageElementsSettings(next, { runningHeader: { ...next.pageElements.runningHeader, fontFamily: 'Frank Ruhl Libre' } }, 'ai');

@@ -102,6 +102,15 @@ const rashi = words.filter(w => w.fontFamily === 'Noto Rashi Hebrew').length;
 check('the body is in Rashi script', rashi / Math.max(1, words.length) > 0.8, `${rashi}/${words.length}`);
 const openers = bodyLines.filter(l => l.words.some(w => w.text === 'עוד')).flatMap(l => l.words.filter(w => w.text === 'עוד'));
 check('the opening words are bold square letters', openers.length > 0 && openers.every(w => w.isBold && w.fontFamily === 'Frank Ruhl Libre'), `${openers.length} openers`);
+{
+  // a blank line between paragraphs: the next paragraph starts two line pitches below the last line of the one before (same column)
+  let gaps = 0, ok = 0;
+  for (const p of body) for (const x of new Set(lines(p).map(l => Math.round(l.xLeft ?? 0)))) {
+    const col = lines(p).filter(l => Math.round(l.xLeft ?? 0) === x && l.role === 'main_source').sort((a, b) => a.yBaseline - b.yBaseline);
+    for (let i = 1; i < col.length; i++) if (col[i].unitId !== col[i - 1].unitId) { gaps++; if (col[i].yBaseline - col[i - 1].yBaseline >= 16.5 * 1.9) ok++; }
+  }
+  check('a blank line between paragraphs', gaps > 0 && ok === gaps, `${ok}/${gaps}`);
+}
 check('no first-line indent', bodyLines.every(l => !(l.firstLineIndentPt ?? 0)));
 
 const headLines = body.flatMap(lines).filter(l => l.role === 'heading');

@@ -1310,7 +1310,14 @@ export function upgradeLegacyTwoColumnSefer(
   settings: ProfessionalDesignSettings
 ): ProfessionalDesignSettings | null {
   if (layoutType !== 'two_column') return null;
-  if (settings.roleStyles?.main_source?.paragraph?.openingWordsFontFamily) return null; // already trained
+  if (settings.roleStyles?.main_source?.paragraph?.openingWordsFontFamily) {
+    // already trained: bring an earlier version up to date (v2: a blank
+    // line between paragraphs), keeping everything else as it is
+    if ((settings.pageElements?.twoColumnSeferVersion ?? 1) >= 2) return null;
+    let next = DesignSettingsEngine.updateRoleParagraphStyle(settings, 'main_source', { spaceAfterPt: settings.roleStyles.main_source.paragraph.leadingPt || 16.5 }, 'ai');
+    next = DesignSettingsEngine.updatePageElementsSettings(next, { twoColumnSeferVersion: 2 }, 'ai');
+    return next;
+  }
   if (settings.pageElements?.splitTitleHeader !== undefined) return null; // the user's own choice
   const t = settings.pageLayout?.seferType;
   if (t && t !== 'halacha' && t !== 'prose') return null;
