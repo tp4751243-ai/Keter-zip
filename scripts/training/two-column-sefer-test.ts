@@ -97,7 +97,18 @@ const lines = (p: PageTypesetResult): TypesetLine[] => [...p.sourceLines, ...(p.
 const g = settings.pageLayout.geometry;
 const contentW = g.pageWidth - g.marginInside - g.marginOutside;
 
-const bodyLines = body.flatMap(lines).filter(l => l.role === 'main_source');
+// (the front matter is one full-width column — checked below)
+const frontIds = new Set<string>();
+{
+  let inFront = false;
+  for (const u of units) {
+    if (u.role === 'heading' || u.role === 'chapter') inFront = /^(הסכמות|הקדמה)$/.test(u.rawText);
+    if (inFront) frontIds.add(u.id);
+  }
+}
+const bodyLines = body.flatMap(lines).filter(l => l.role === 'main_source' && !frontIds.has(l.unitId));
+const frontLines = body.flatMap(lines).filter(l => l.role === 'main_source' && frontIds.has(l.unitId));
+check('הסכמות and הקדמה are set in ONE full-width column (the old prints)', frontLines.length > 0 && frontLines.every(l => (l.xRight ?? 0) - (l.xLeft ?? 0) > contentW * 0.95), `${frontLines.length} lines`);
 const cols = new Set(bodyLines.map(l => Math.round(l.xLeft ?? -1)));
 check('two columns of text', cols.size === 2, `column starts ${[...cols].join(', ')}`);
 check('every body line inside half the width (a column)', bodyLines.every(l => (l.xRight ?? 0) - (l.xLeft ?? 0) < contentW * 0.55));
@@ -117,7 +128,7 @@ check('the opening words are bold square letters', openers.length > 0 && openers
 }
 check('no first-line indent', bodyLines.every(l => !(l.firstLineIndentPt ?? 0)));
 
-const headLines = body.flatMap(lines).filter(l => l.role === 'heading');
+const headLines = body.flatMap(lines).filter(l => l.role === 'heading' && !frontIds.has(l.unitId));
 check('parsha headings sit inside the column (not across the page)', headLines.length > 0 && headLines.every(l => (l.xRight ?? 0) - (l.xLeft ?? 0) < contentW * 0.55));
 const headTexts = headLines.map(l => l.words.filter(w => !w.isSpace).map(w => w.text).join(' '));
 check('a heading repeated in the Word file is printed once', PARSHIYOT.every(p => headTexts.filter(t => t === p).length === 1), headTexts.join(' | '));

@@ -55,7 +55,8 @@ export interface ProseColumnsInput {
 }
 
 interface Item {
-  kind: 'span' | 'col';
+  /** 'full': one full-width column, flowing line by line (front matter) */
+  kind: 'span' | 'col' | 'full';
   lines: TypesetLine[];
   /** starts on a new page (front matter: הקדמה / הסכמות, and what follows it) */
   newPage?: boolean;
@@ -66,7 +67,7 @@ interface Item {
  * own page, the head reads "הקדמה" / "הסכמות" (never a parsha), and the
  * book proper starts on a new page after them.
  */
-export const FRONT_MATTER_RE = /^(הקדמה|הקדמת|הקדמות|פתח דבר|הסכמה|הסכמת|הסכמות|מכתב ברכה|מכתבי ברכה)(\s|$)/;
+export const FRONT_MATTER_RE = /^(?:(הקדמה|הקדמת|הקדמות|פתח דבר|הסכמה|הסכמת|הסכמות|מכתב ברכה|מכתבי ברכה)(\s|$)|שער$)/;
 
 const lineH = (l: TypesetLine, i: number, lines: TypesetLine[]): number => {
   const base = l.leadingPt && l.leadingPt > 0 ? l.leadingPt : l.height;
@@ -116,13 +117,25 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
     // "Heading 3 בראשית") is printed once
     if (isHead && plain(u.rawText) === prevHeadingText) continue;
     prevHeadingText = isHead ? plain(u.rawText) : '';
-    const spanning = SPANNING_ROLES.has(u.role) && !(headingsInColumn && (u.role === 'heading' || u.role === 'subtitle'));
+    // front matter: a הקדמה / הסכמות heading opens it; the next other
+    // heading closes it (the book proper)
+    const isFront = isHead && FRONT_MATTER_RE.test(plain(u.rawText));
+    const wasFront = inFrontMatter;
+    if (isHead) inFrontMatter = isFront || (inFrontMatter && u.role !== 'heading' && u.role !== 'chapter');
+    // (the reprinted שער goes on with the title block above it; the
+    // הסכמות and the הקדמה, and the book after them, start new pages)
+    const breakHere = isHead && ((isFront && plain(u.rawText) !== 'שער') || (wasFront && !inFrontMatter)) && items.length > 0;
+    // The הקדמה and the הסכמות are set in ONE full-width column on pages of
+    // their own, under a large centred title (the user's Kedushat Levi
+    // prints), even in a two-column sefer.
+    const full = headingsInColumn && inFrontMatter;
+    const spanning = !full && SPANNING_ROLES.has(u.role) && !(headingsInColumn && (u.role === 'heading' || u.role === 'subtitle'));
     if (u.role === 'chapter') chapter = u.rawText.replace(/[֑-ׇ]/g, '').trim();
     // the running head follows the parsha (a top-level heading)
     if (headingsInColumn && u.role === 'heading' && (u.hierarchyLevel ?? 2) <= 2) chapter = plain(u.rawText);
-    if (isHead && FRONT_MATTER_RE.test(plain(u.rawText))) chapter = plain(u.rawText).split(/\s+/)[0] === 'הסכמה' || plain(u.rawText).startsWith('הסכמ') ? 'הסכמות' : 'הקדמה';
+    if (isFront) chapter = plain(u.rawText).startsWith('הסכמ') ? 'הסכמות' : plain(u.rawText) === 'שער' ? '' : 'הקדמה';
     chapterOfUnit.set(u.id, chapter);
-    const lines = engine.typesetContentUnit(u, spanning ? contentW : colW, undefined, !spanning);
+    const lines = engine.typesetContentUnit(u, spanning || full ? contentW : colW, undefined, !spanning);
     if (!lines.length) continue;
     if (spanning || (headingsInColumn && isHead)) {
       for (const l of lines) {
@@ -131,15 +144,22 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
         l.isJustified = false;
       }
     }
-    const kind = spanning ? 'span' : 'col';
+    if (full && isFront) {
+      // the section title, large (the print: "הסכמות" across the page head)
+      for (const l of lines) {
+        l.fontSizePt = (l.fontSizePt ?? input.fontSize) * 1.5;
+        l.words = l.words.map(w => ({ ...w, fontSizePt: (w.fontSizePt ?? input.fontSize) * 1.5, width: w.width * 1.5 }));
+        l.width *= 1.5;
+        l.height *= 1.5;
+        l.ascent *= 1.5;
+        l.descent *= 1.5;
+        if (l.leadingPt) l.leadingPt *= 1.5;
+      }
+    }
+    const kind: Item['kind'] = full ? 'full' : spanning ? 'span' : 'col';
     const last = items[items.length - 1];
-    // a front-matter heading, or the first heading after front matter,
-    // begins a new page
-    const isFront = isHead && FRONT_MATTER_RE.test(plain(u.rawText));
-    const breakHere = isHead && (isFront || (inFrontMatter && !isFront)) && items.length > 0;
-    if (isHead) inFrontMatter = isFront || (inFrontMatter && u.role !== 'heading' && u.role !== 'chapter');
     if (breakHere) items.push({ kind, lines, newPage: true });
-    else if (last && last.kind === kind && kind === 'col') last.lines.push(...lines);
+    else if (last && last.kind === kind && kind !== 'span') last.lines.push(...lines);
     else if (last && last.kind === 'span' && kind === 'span') last.lines.push(...lines);
     else items.push({ kind, lines });
   }
@@ -201,6 +221,36 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
       if (item.newPage && lineIdx === 0 && placed.length > 0) {
         pageFull = true;
         break;
+      }
+      if (item.kind === 'full') {
+        // one full-width column, line by line; a heading never ends a page
+        const rest = item.lines.slice(lineIdx);
+        let k = 0;
+        while (k < rest.length) {
+          const h = lineH(rest[k], k, rest);
+          const nextH = k + 1 < rest.length ? lineH(rest[k + 1], k + 1, rest) : 0;
+          if (y + h > avail() + 0.01) break;
+          if (isHeadLine(rest[k]) && k + 1 < rest.length && y + h + nextH > avail() + 0.01 && placed.length > 0) break;
+          if (pageChapter === undefined) pageChapter = chapterOfUnit.get(rest[k].unitId);
+          if (k === 0 || rest[k - 1].unitId !== rest[k].unitId) commitFootnotes(rest[k].unitId);
+          placed.push(place(rest[k], 0, contentW, y));
+          y += h;
+          k++;
+        }
+        if (k === 0 && placed.length === 0) {
+          // a single line taller than the page: place it anyway
+          placed.push(place(rest[0], 0, contentW, y));
+          y += lineH(rest[0], 0, rest);
+          k = 1;
+        }
+        lineIdx += k;
+        if (lineIdx >= item.lines.length) {
+          itemIdx++;
+          lineIdx = 0;
+        } else {
+          pageFull = true;
+        }
+        continue;
       }
       const rest = item.lines.slice(lineIdx);
       if (item.kind === 'span') {
