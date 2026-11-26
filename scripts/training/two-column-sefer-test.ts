@@ -50,13 +50,17 @@ const units: ContentUnit[] = [];
 const add = (role: ContentUnit['role'], rawText: string, extra: Partial<ContentUnit> = {}) =>
   units.push({ id: `u${n}`, role, rawText, styleName: role, order: n++, hierarchyLevel: 2, language: 'he', ...extra } as ContentUnit);
 add('chapter', 'קדושת לוי', { hierarchyLevel: 1 });
-for (const fm of ['הסכמות', 'הקדמה']) {
-  add('heading', fm, { hierarchyLevel: 2 });
-  for (let k = 0; k < 6; k++) add('main_source', FILLER.join(', ') + ':');
+add('heading', 'הסכמות', { hierarchyLevel: 2 });
+for (let h = 0; h < 3; h++) {
+  add('main_source', `הסכמת הרב הגאון החסיד המפורסם מספר ${h + 1}`);
+  for (let k = 0; k < (h === 1 ? 40 : 3); k++) add('main_source', FILLER.join(', ') + ':'); // the second is longer than a page
 }
+add('heading', 'הקדמה', { hierarchyLevel: 2 });
+for (let k = 0; k < 6; k++) add('main_source', FILLER.join(', ') + ':');
+add('heading', 'בראשית', { hierarchyLevel: 2 }); // Word: Heading 2 = the sefer
 PARSHIYOT.forEach((p, pi) => {
-  add('heading', p, { hierarchyLevel: 2 });
-  add('heading', p, { hierarchyLevel: 3 }); // Word: Heading 3 repeats the parsha name
+  add('heading', p, { hierarchyLevel: 3 }); // Heading 3 = the parsha
+  if (pi === 0) add('heading', p, { hierarchyLevel: 3 }); // a repeated heading
   for (let k = 0; k < 40; k++) {
     const opening = ['או יאמר', 'עוד יבואר', 'ונראה לפרש', 'בפסוק', 'במדרש'][k % 5];
     let body = Array.from({ length: 5 + (k % 4) }, (_, j) => FILLER[(k + j + pi) % FILLER.length]).join(', ') + ':';
@@ -121,7 +125,7 @@ check('the opening words are bold square letters', openers.length > 0 && openers
   // a blank line between paragraphs: the next paragraph starts two line pitches below the last line of the one before (same column)
   let gaps = 0, ok = 0;
   for (const p of body) for (const x of new Set(lines(p).map(l => Math.round(l.xLeft ?? 0)))) {
-    const col = lines(p).filter(l => Math.round(l.xLeft ?? 0) === x && l.role === 'main_source').sort((a, b) => a.yBaseline - b.yBaseline);
+    const col = lines(p).filter(l => Math.round(l.xLeft ?? 0) === x && l.role === 'main_source' && !frontIds.has(l.unitId)).sort((a, b) => a.yBaseline - b.yBaseline);
     for (let i = 1; i < col.length; i++) if (col[i].unitId !== col[i - 1].unitId) { gaps++; if (col[i].yBaseline - col[i - 1].yBaseline >= 16.5 * 1.9) ok++; }
   }
   check('a blank line between paragraphs', gaps > 0 && ok === gaps, `${ok}/${gaps}`);
@@ -156,7 +160,15 @@ check('a heading never ends a column', headAtFoot === 0, `${headAtFoot}`);
 // (a page that ends a section before a forced new page — the title, the
 // הסכמות, the הקדמה — is not expected to be full)
 const sectionEnds = new Set(body.map((p, i) => (i + 1 < body.length && lines(body[i + 1]).some(l => l.role === 'heading' && ['הסכמות', 'הקדמה', 'בראשית'].includes(l.words.filter(w => !w.isSpace).map(w => w.text).join(' '))) ? i : -1)));
-const fills = body.slice(0, -1).filter((_, i) => !sectionEnds.has(i)).map(p => {
+{
+  const pageOf = (t: string) => body.filter(p => lines(p).some(l => l.words.filter(w => !w.isSpace).map(w => w.text).join(' ').includes(t)));
+  const ok = [1, 2, 3].every(n => pageOf(`מספר ${n}`).length === 1) && new Set([1, 2, 3].map(n => body.indexOf(pageOf(`מספר ${n}`)[0]))).size === 3;
+  check('each הסכמה on ONE page of its own (a long one is set smaller)', ok, [1, 2, 3].map(n => pageOf(`מספר ${n}`).map(p => body.indexOf(p)).join('/')).join(' '));
+  const front = body.filter(p => p.isFrontMatter);
+  const firstBook = body.find(p => !p.isFrontMatter);
+  check('front matter carries no page number; the book starts at א', front.length >= 3 && front.every(p => !p.folioDisplay) && firstBook?.folioDisplay === 'א', `${front.length} front pages, book starts ${firstBook?.folioDisplay}`);
+}
+const fills = body.slice(0, -1).filter((p, i) => !sectionEnds.has(i) && !p.isFrontMatter).map(p => {
   const ls = lines(p);
   const ch = p.geometry.pageHeight - p.geometry.marginTop - p.geometry.marginBottom;
   return ls.length ? Math.max(...ls.map(l => l.yBaseline)) / ch : 0;

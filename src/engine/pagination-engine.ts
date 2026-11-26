@@ -908,6 +908,7 @@ export class PaginationEngine {
       }
     }
     let bodyPageCounter = 0;
+    let frontPageCount = 0;
 
     // Layout training T2.1 — Vilna running head (perek name, perek number,
     // masechta, folio on the outer corner). Opt-in per book through
@@ -953,7 +954,11 @@ export class PaginationEngine {
         // One amud per page: the folio is the amud's own (from its דף heading).
         const fnCfg = designSettings?.pageElements?.folioNumbering;
         const amudIdx = pg.amudKey && talmudFolio ? bodyIndexOfAmud(pg.amudKey, fnCfg?.startDaf ?? 2, fnCfg?.startAmud ?? 'a') : null;
-        const folioInfo = formatBodyFolioLabel(amudIdx ?? bIdx, layoutType, designSettings?.pageElements, talmudFolio);
+        // Front matter (title, שער, הסכמות, הקדמה) carries no number; the
+        // book proper is numbered from א (the user).
+        if (pg.isFrontMatter) frontPageCount++;
+        const folioInfo = formatBodyFolioLabel(amudIdx ?? bIdx - frontPageCount, layoutType, designSettings?.pageElements, talmudFolio);
+        if (pg.isFrontMatter) folioInfo.folioDisplay = '';
         pg.folioDisplay = folioInfo.folioDisplay;
         pg.pageNumberHebrew = folioInfo.folioDisplay;
         const spreadSide = spreadSideForPageIndex(sideIdx);

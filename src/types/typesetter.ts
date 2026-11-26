@@ -863,6 +863,8 @@ export interface PageTypesetResult {
   chumashIntro?: boolean;
   /** Talmud: the amud this page sets ("ב.", "ב:"), from the import's דף headings — one amud per page. */
   amudKey?: string;
+  /** Front matter (title, שער, הסכמות, הקדמה): no page number; numbering starts with the book. */
+  isFrontMatter?: boolean;
   /** Index of this page within its amud (0 = the amud's page; 1+ = carried over). */
   amudPageIdx?: number;
   /**

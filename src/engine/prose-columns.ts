@@ -41,6 +41,7 @@ import type {
 import type { ProfessionalDesignSettings } from '../types/design-settings';
 import type { TypesettingRulesConfig } from './typesetting-rules-engine';
 import { TypesetterEngine } from './typesetter-core';
+import { DesignSettingsEngine } from './design-settings-engine';
 
 const SPANNING_ROLES = new Set(['main_title', 'subtitle', 'chapter', 'heading']);
 const isHeadLine = (l: TypesetLine) => l.role === 'heading' || l.role === 'chapter' || l.role === 'subtitle' || l.role === 'main_title';
@@ -60,6 +61,9 @@ interface Item {
   lines: TypesetLine[];
   /** starts on a new page (front matter: הקדמה / הסכמות, and what follows it) */
   newPage?: boolean;
+  /** one הסכמה: fits on ONE page (set smaller when it is longer) */
+  fitOnePage?: boolean;
+  units?: ContentUnit[];
 }
 
 /**
@@ -110,6 +114,13 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
   let chapter = '';
   let prevHeadingText = '';
   let inFrontMatter = false;
+  let frontKind: 'haskamot' | 'hakdama' | 'shaar' | '' = '';
+  let prevUnit: ContentUnit | null = null;
+  // units before the book proper (title, שער, הסכמות, הקדמה): their pages
+  // carry no page number; numbering starts with the book (the user)
+  const frontUnitIds = new Set<string>();
+  let bookStarted = false;
+  let sawFront = false;
   for (const u of input.units) {
     if (u.role === 'footnote' || !u.rawText?.trim()) continue;
     const isHead = u.role === 'heading' || u.role === 'chapter' || u.role === 'subtitle' || u.role === 'main_title';
@@ -129,10 +140,25 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
     // their own, under a large centred title (the user's Kedushat Levi
     // prints), even in a two-column sefer.
     const full = headingsInColumn && inFrontMatter;
+    if (isFront) {
+      sawFront = true;
+      const t0 = plain(u.rawText);
+      frontKind = t0.startsWith('הסכמ') ? 'haskamot' : t0 === 'שער' ? 'shaar' : 'hakdama';
+    }
+    if (wasFront && !inFrontMatter && isHead) bookStarted = true;
+    if (!bookStarted) frontUnitIds.add(u.id);
+    // each הסכמה on a page of its own: a paragraph opening "הסכמת …" starts
+    // the next one (the general title line stays with the first)
+    const isHaskamaStart =
+      full && frontKind === 'haskamot' && u.role === 'main_source' && /^הסכמת/.test(plain(u.rawText)) &&
+      !!prevUnit && !(prevUnit.role === 'heading' || /^הסכמת/.test(plain(prevUnit.rawText)));
+    prevUnit = u;
     const spanning = !full && SPANNING_ROLES.has(u.role) && !(headingsInColumn && (u.role === 'heading' || u.role === 'subtitle'));
     if (u.role === 'chapter') chapter = u.rawText.replace(/[֑-ׇ]/g, '').trim();
-    // the running head follows the parsha (a top-level heading)
-    if (headingsInColumn && u.role === 'heading' && (u.hierarchyLevel ?? 2) <= 2) chapter = plain(u.rawText);
+    // the running head follows the parsha / Yom Tov — the most recent
+    // heading (Heading 2 = the sefer, Heading 3 = the parsha: the parsha
+    // wins as soon as it comes)
+    if (headingsInColumn && u.role === 'heading' && (u.hierarchyLevel ?? 2) <= 3) chapter = plain(u.rawText);
     if (isFront) chapter = plain(u.rawText).startsWith('הסכמ') ? 'הסכמות' : plain(u.rawText) === 'שער' ? '' : 'הקדמה';
     chapterOfUnit.set(u.id, chapter);
     const lines = engine.typesetContentUnit(u, spanning || full ? contentW : colW, undefined, !spanning);
@@ -158,10 +184,67 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
     }
     const kind: Item['kind'] = full ? 'full' : spanning ? 'span' : 'col';
     const last = items[items.length - 1];
-    if (breakHere) items.push({ kind, lines, newPage: true });
-    else if (last && last.kind === kind && kind !== 'span') last.lines.push(...lines);
+    if (breakHere || isHaskamaStart) items.push({ kind, lines, newPage: true, fitOnePage: full && (frontKind === 'haskamot'), units: [u] });
+    else if (last && last.kind === kind && kind !== 'span') {
+      last.lines.push(...lines);
+      last.units?.push(u);
+    }
     else if (last && last.kind === 'span' && kind === 'span') last.lines.push(...lines);
     else items.push({ kind, lines });
+  }
+
+  if (!sawFront || !bookStarted) frontUnitIds.clear();
+
+  // One הסכמה = one page: one that is longer than the page is set smaller
+  // (down to 60%) until it fits.
+  const fullLines = (us: ContentUnit[], f: number): TypesetLine[] => {
+    let ds = designSettings;
+    if (ds && f !== 1) {
+      for (const role of ['main_source', 'heading', 'chapter'] as const) {
+        const st = DesignSettingsEngine.resolveStyle(ds, { role });
+        ds = DesignSettingsEngine.updateRoleCharacterStyle(ds, role, { fontSizePt: Math.round(st.character.fontSizePt * f * 100) / 100 }, 'ai');
+        ds = DesignSettingsEngine.updateRoleParagraphStyle(ds, role, {
+          ...(st.paragraph.leadingPt ? { leadingPt: Math.round(st.paragraph.leadingPt * f * 100) / 100 } : {}),
+          spaceAfterPt: Math.round((st.paragraph.spaceAfterPt || 0) * f * 100) / 100,
+          spaceBeforePt: Math.round((st.paragraph.spaceBeforePt || 0) * f * 100) / 100,
+        }, 'ai');
+      }
+    }
+    const eng = new TypesetterEngine(input.fontSize * f, rulesConfig, ds);
+    const out: TypesetLine[] = [];
+    for (const u of us) {
+      const ls = eng.typesetContentUnit(u, contentW, undefined, true);
+      const head = u.role === 'heading' || u.role === 'chapter';
+      for (const l of ls) {
+        if (head) {
+          l.alignment = 'center';
+          l.paragraphAlignment = 'center';
+          l.isJustified = false;
+        }
+        if (head && FRONT_MATTER_RE.test(plain(u.rawText))) {
+          l.fontSizePt = (l.fontSizePt ?? input.fontSize) * 1.5;
+          l.words = l.words.map(w => ({ ...w, fontSizePt: (w.fontSizePt ?? input.fontSize) * 1.5, width: w.width * 1.5 }));
+          l.width *= 1.5;
+          l.height *= 1.5;
+          l.ascent *= 1.5;
+          l.descent *= 1.5;
+          if (l.leadingPt) l.leadingPt *= 1.5;
+        }
+      }
+      out.push(...ls);
+    }
+    return out;
+  };
+  const totalH = (ls: TypesetLine[]) => ls.reduce((a, l, i) => a + lineH(l, i, ls), 0);
+  for (const it of items) {
+    if (!it.fitOnePage || !it.units?.length || totalH(it.lines) <= contentH - 2) continue;
+    let lo = 0.6, hi = 1, best = fullLines(it.units, 0.6);
+    for (let k = 0; k < 6; k++) {
+      const mid = (lo + hi) / 2;
+      const ls = fullLines(it.units, mid);
+      if (totalH(ls) <= contentH - 2) { best = ls; lo = mid; } else hi = mid;
+    }
+    it.lines = best;
   }
 
   const pages: PageTypesetResult[] = [];
@@ -417,6 +500,7 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
       knee,
       designSettings,
       runningChapter: pageChapter ?? '',
+      isFrontMatter: frontUnitIds.size > 0 && placed.length > 0 && placed.every(l => frontUnitIds.has(l.unitId)),
     } as PageTypesetResult);
   }
 
