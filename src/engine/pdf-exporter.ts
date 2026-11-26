@@ -800,6 +800,16 @@ export class PdfExporter {
    * caller must allow raster pages in the vector assertion for that
    * export (see `generateMultiPagePdf`).
    */
+  /**
+   * A title page INSIDE the book is one book page, whatever its cover
+   * mode: the wraparound cover (back + spine + front) is a separate cover
+   * file. (The user's Me'or Einayim PDF opened with a double-width cover
+   * sheet and a double-width blank back-of-title.)
+   */
+  public static asInteriorTitlePage<T extends CoverPageData | null | undefined>(c: T): T {
+    return c && c.coverMode === 'print_wraparound_cover' ? ({ ...c, coverMode: 'interior_title_page' } as T) : c;
+  }
+
   public static computeCoverSheetDimensions(
     cover: CoverPageData | null | undefined,
     geometry: PageGeometry,
@@ -2780,9 +2790,11 @@ export class PdfExporter {
     // settings), not as a body page — no header, no folio, no body lines.
     if (page.isTitlePage && !page.isBackOfTitle) {
       const tp = page.designSettings?.titlePage;
-      const cover: CoverPageData = tp?.enabled
-        ? titlePageSettingsToCoverData(tp, headerTitle || 'ספר קודש', geometry.pageHeight)
-        : { title: headerTitle || 'ספר קודש' };
+      const cover: CoverPageData = this.asInteriorTitlePage(
+        tp?.enabled
+          ? titlePageSettingsToCoverData(tp, headerTitle || 'ספר קודש', geometry.pageHeight)
+          : { title: headerTitle || 'ספר קודש' }
+      );
       this.renderCoverPageToPdf(doc, cover, geometry, { bleedPt, colorMode: renderOpts.colorMode });
       return renderPlan;
     }
@@ -3487,9 +3499,11 @@ export class PdfExporter {
     let firstBodyIndex = 0;
     if (bodyPages[0]?.isTitlePage) {
       const tp = bodyPages[0].designSettings?.titlePage;
-      const titleCover: CoverPageData = tp?.enabled
-        ? titlePageSettingsToCoverData(tp, bookDoc.title || 'ספר קודש', geometry.pageHeight)
-        : { title: bookDoc.title || 'ספר קודש' };
+      const titleCover: CoverPageData = this.asInteriorTitlePage(
+        tp?.enabled
+          ? titlePageSettingsToCoverData(tp, bookDoc.title || 'ספר קודש', geometry.pageHeight)
+          : { title: bookDoc.title || 'ספר קודש' }
+      );
       addSheet(mediaW, mediaH);
       this.renderCoverPageToPdf(doc, titleCover, geometry, { bleedPt, colorMode: opts.colorMode });
       applyWatermark(mediaW, mediaH);
@@ -3655,7 +3669,7 @@ export class PdfExporter {
         : null
     );
     const firstCoverDims = this.computeCoverSheetDimensions(
-      cover ?? inDocCoverData,
+      cover ?? this.asInteriorTitlePage(inDocCoverData),
       geometry,
       bleedPt
     );
@@ -3703,7 +3717,7 @@ export class PdfExporter {
         const tpCover = pageWithSettings.designSettings?.titlePage?.enabled
           ? titlePageSettingsToCoverData(pageWithSettings.designSettings.titlePage, bookDoc.title || 'ספר קודש', geometry.pageHeight)
           : { title: bookDoc.title || 'ספר קודש' };
-        const tpDims = this.computeCoverSheetDimensions(tpCover, geometry, bleedPt);
+        const tpDims = this.computeCoverSheetDimensions(this.asInteriorTitlePage(tpCover), geometry, bleedPt);
         addPdfPage(tpDims.widthPt, tpDims.heightPt);
         onProgress?.(i + 1, totalPages);
         this.renderPageToPdfNative(doc, pageWithSettings, { bleedPt, colorMode: opts.colorMode });

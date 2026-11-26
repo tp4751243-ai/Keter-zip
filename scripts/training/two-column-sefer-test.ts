@@ -50,6 +50,10 @@ const units: ContentUnit[] = [];
 const add = (role: ContentUnit['role'], rawText: string, extra: Partial<ContentUnit> = {}) =>
   units.push({ id: `u${n}`, role, rawText, styleName: role, order: n++, hierarchyLevel: 2, language: 'he', ...extra } as ContentUnit);
 add('chapter', 'קדושת לוי', { hierarchyLevel: 1 });
+for (const fm of ['הסכמות', 'הקדמה']) {
+  add('heading', fm, { hierarchyLevel: 2 });
+  for (let k = 0; k < 6; k++) add('main_source', FILLER.join(', ') + ':');
+}
 PARSHIYOT.forEach((p, pi) => {
   add('heading', p, { hierarchyLevel: 2 });
   add('heading', p, { hierarchyLevel: 3 }); // Word: Heading 3 repeats the parsha name
@@ -126,7 +130,22 @@ for (const p of body) {
 }
 check('a heading never ends a column', headAtFoot === 0, `${headAtFoot}`);
 
-const fills = body.slice(0, -1).map(p => {
+{
+  const headOf = (p: PageTypesetResult) => (p.vilnaHeader?.items ?? []).filter(i => i.yBaseline < p.geometry.marginTop).map(i => i.words.map(w => w.text).join(' '));
+  const pageWith = (t: string) => body.findIndex(p => lines(p).some(l => l.role === 'heading' && l.words.filter(w => !w.isSpace).map(w => w.text).join(' ') === t));
+  const firstLineIs = (i: number, t: string) => {
+    const right = Math.max(...lines(body[i]).map(l => l.xRight ?? 0));
+    const top = lines(body[i]).filter(l => Math.abs((l.xRight ?? 0) - right) < 2).sort((a, b) => a.yBaseline - b.yBaseline)[0];
+    return top?.role === 'heading' && top.words.filter(w => !w.isSpace).map(w => w.text).join(' ') === t;
+  };
+  const h = pageWith('הסכמות'), q = pageWith('הקדמה'), b = pageWith('בראשית');
+  check('הסכמות, הקדמה and the book proper each start on their own page', h >= 0 && q > h && b > q && firstLineIs(h, 'הסכמות') && firstLineIs(q, 'הקדמה') && firstLineIs(b, 'בראשית'), `${h} ${q} ${b}`);
+  check('the head reads "הסכמות" / "הקדמה" on those pages, never a parsha', headOf(body[h]).includes('הסכמות') && headOf(body[q]).includes('הקדמה') && !PARSHIYOT.some(p => headOf(body[h]).includes(p) || headOf(body[q]).includes(p)), `${headOf(body[h])} / ${headOf(body[q])}`);
+}
+// (a page that ends a section before a forced new page — the title, the
+// הסכמות, the הקדמה — is not expected to be full)
+const sectionEnds = new Set(body.map((p, i) => (i + 1 < body.length && lines(body[i + 1]).some(l => l.role === 'heading' && ['הסכמות', 'הקדמה', 'בראשית'].includes(l.words.filter(w => !w.isSpace).map(w => w.text).join(' '))) ? i : -1)));
+const fills = body.slice(0, -1).filter((_, i) => !sectionEnds.has(i)).map(p => {
   const ls = lines(p);
   const ch = p.geometry.pageHeight - p.geometry.marginTop - p.geometry.marginBottom;
   return ls.length ? Math.max(...ls.map(l => l.yBaseline)) / ch : 0;

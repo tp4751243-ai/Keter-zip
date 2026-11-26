@@ -57,7 +57,16 @@ export interface ProseColumnsInput {
 interface Item {
   kind: 'span' | 'col';
   lines: TypesetLine[];
+  /** starts on a new page (front matter: הקדמה / הסכמות, and what follows it) */
+  newPage?: boolean;
 }
+
+/**
+ * Front matter (the user): the הקדמה and the הסכמות each start on their
+ * own page, the head reads "הקדמה" / "הסכמות" (never a parsha), and the
+ * book proper starts on a new page after them.
+ */
+export const FRONT_MATTER_RE = /^(הקדמה|הקדמת|הקדמות|פתח דבר|הסכמה|הסכמת|הסכמות|מכתב ברכה|מכתבי ברכה)(\s|$)/;
 
 const lineH = (l: TypesetLine, i: number, lines: TypesetLine[]): number => {
   const base = l.leadingPt && l.leadingPt > 0 ? l.leadingPt : l.height;
@@ -99,6 +108,7 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
   const chapterOfUnit = new Map<string, string>();
   let chapter = '';
   let prevHeadingText = '';
+  let inFrontMatter = false;
   for (const u of input.units) {
     if (u.role === 'footnote' || !u.rawText?.trim()) continue;
     const isHead = u.role === 'heading' || u.role === 'chapter' || u.role === 'subtitle' || u.role === 'main_title';
@@ -110,6 +120,7 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
     if (u.role === 'chapter') chapter = u.rawText.replace(/[֑-ׇ]/g, '').trim();
     // the running head follows the parsha (a top-level heading)
     if (headingsInColumn && u.role === 'heading' && (u.hierarchyLevel ?? 2) <= 2) chapter = plain(u.rawText);
+    if (isHead && FRONT_MATTER_RE.test(plain(u.rawText))) chapter = plain(u.rawText).split(/\s+/)[0] === 'הסכמה' || plain(u.rawText).startsWith('הסכמ') ? 'הסכמות' : 'הקדמה';
     chapterOfUnit.set(u.id, chapter);
     const lines = engine.typesetContentUnit(u, spanning ? contentW : colW, undefined, !spanning);
     if (!lines.length) continue;
@@ -122,7 +133,13 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
     }
     const kind = spanning ? 'span' : 'col';
     const last = items[items.length - 1];
-    if (last && last.kind === kind && kind === 'col') last.lines.push(...lines);
+    // a front-matter heading, or the first heading after front matter,
+    // begins a new page
+    const isFront = isHead && FRONT_MATTER_RE.test(plain(u.rawText));
+    const breakHere = isHead && (isFront || (inFrontMatter && !isFront)) && items.length > 0;
+    if (isHead) inFrontMatter = isFront || (inFrontMatter && u.role !== 'heading' && u.role !== 'chapter');
+    if (breakHere) items.push({ kind, lines, newPage: true });
+    else if (last && last.kind === kind && kind === 'col') last.lines.push(...lines);
     else if (last && last.kind === 'span' && kind === 'span') last.lines.push(...lines);
     else items.push({ kind, lines });
   }
@@ -181,6 +198,10 @@ export function paginateProseColumns(input: ProseColumnsInput): BookTypesetDocum
     let pageFull = false;
     while (!pageFull && itemIdx < items.length) {
       const item = items[itemIdx];
+      if (item.newPage && lineIdx === 0 && placed.length > 0) {
+        pageFull = true;
+        break;
+      }
       const rest = item.lines.slice(lineIdx);
       if (item.kind === 'span') {
         const H = rest.reduce((s, l, i) => s + lineH(l, i, rest), 0) + spanGap;
