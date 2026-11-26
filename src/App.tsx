@@ -109,7 +109,7 @@ import {
   writeTitlePageTemplateState,
 } from './engine/title-page-templates';
 // v0.9.0 Part C — automatic layout on import + historical recipes.
-import { upgradeLegacyTwoColumnSefer } from './engine/auto-layout';
+import { upgradeLegacyTwoColumnSefer, twoColumnRecipeFor, classifyForImport } from './engine/auto-layout';
 import {
   applyRecipeToSettingsById,
   constrainDecisionToSeferType,
@@ -1605,12 +1605,12 @@ export default function App() {
       // release, then deleting it. No localStorage is read or written
       // anywhere else in the creation flow any more.
       const chosen: ChosenSetup | null = setup ?? migratePendingChosenSetup();
-      const pendingCustom = chosen?.customLayout ?? null;
-      const pendingArchetype = chosen?.archetypeId ?? null;
-      const pendingRecipeId = chosen?.recipeId ?? null;
+      let pendingCustom = chosen?.customLayout ?? null;
+      let pendingArchetype = chosen?.archetypeId ?? null;
+      let pendingRecipeId = chosen?.recipeId ?? null;
       // A plain base-layout choice (no recipe / archetype / custom
       // boxes) is the explicit layout.
-      const pendingExplicitLayout = chosen && !chosen.recipeId && !chosen.archetypeId && !chosen.customLayout
+      let pendingExplicitLayout = chosen && !chosen.recipeId && !chosen.archetypeId && !chosen.customLayout
         ? chosen.baseLayout
         : null;
 
@@ -1636,6 +1636,15 @@ export default function App() {
         rawDecision && autoLayout
           ? constrainDecisionToSeferType(rawDecision, autoLayout.classification, bookType)
           : rawDecision;
+      // The files are unmistakably another kind of book than the card
+      // (a whole tractate imported with the Chumash card): the files win,
+      // the card's layout is not used either.
+      if (bookType && decision && seferTypeForRecipe(decision.recipeId, decision.layoutType) !== bookType && !pendingCustom) {
+        pendingArchetype = null;
+        pendingRecipeId = null;
+        pendingExplicitLayout = null;
+        pendingCustom = null;
+      }
 
       const archetypeObj = pendingArchetype ? getArchetypeById(pendingArchetype) : undefined;
       const pendingRecipeObj = pendingRecipeId ? getRecipeById(pendingRecipeId) : undefined;
@@ -1673,7 +1682,14 @@ export default function App() {
         setAutoLayoutNotice(null);
         setAutoLayoutChangeTarget('custom_layout');
       } else if (pendingArchetype) {
-        let nextSettings = applyArchetypeToSettings(pendingArchetype, baseSettings);
+        // A Chumash card with Chumash files: the trained Mikraot Gedolot
+        // design the files were classified as (the card's own older design
+        // set the same Bereishit on 142 pages instead of 63).
+        const trainedInType =
+          bookType === 'chumash' && decision && seferTypeForRecipe(decision.recipeId, decision.layoutType) === 'chumash';
+        let nextSettings = trainedInType
+          ? applyRecipeToSettingsById(decision!.recipeId, baseSettings)
+          : applyArchetypeToSettings(pendingArchetype, baseSettings);
         if (tp) nextSettings = titlePageSettingsFromClassification(nextSettings, tp);
         handleUpdateDesignSettings(nextSettings, t('הוחלה תבנית עימוד אוטומטית'));
         if (decision) {
@@ -1686,7 +1702,14 @@ export default function App() {
         }
         setAutoLayoutChangeTarget(nextLayout);
       } else if (pendingRecipeId) {
-        let nextSettings = applyRecipeToSettingsById(pendingRecipeId, baseSettings);
+        // A Chumash design card with Chumash files: the trained Mikraot
+        // Gedolot design the files were classified as (the older
+        // chumash-rishonim design set Bereishit on 142 pages, not 63).
+        const useTrained =
+          seferTypeForRecipe(pendingRecipeId) === 'chumash' &&
+          !!decision &&
+          seferTypeForRecipe(decision.recipeId, decision.layoutType) === 'chumash';
+        let nextSettings = applyRecipeToSettingsById(useTrained ? decision!.recipeId : pendingRecipeId, baseSettings);
         if (tp) nextSettings = titlePageSettingsFromClassification(nextSettings, tp);
         handleUpdateDesignSettings(nextSettings, t('הוחלה תבנית עימוד אוטומטית'));
         if (decision) {
@@ -1701,8 +1724,13 @@ export default function App() {
       } else if (pendingExplicitLayout) {
         // Explicit base layout from Step 1: refine with matching classifier recipe
         // only when it matches the user's chosen layout; never revert layoutType.
-        let nextSettings =
-          decision && decision.layoutType === pendingExplicitLayout
+        // Two columns: the trained two-column sefer design unless the
+        // file is a halachic / Mishnah text with its own design.
+        const twoColRecipe = pendingExplicitLayout === 'two_column' ? twoColumnRecipeFor(decision?.recipeId) : null;
+        const useTwoCol = !!twoColRecipe && (twoColRecipe === 'chassidic-drush' || twoColRecipe === 'mussar');
+        let nextSettings = useTwoCol
+          ? applyRecipeToSettingsById(twoColRecipe!, baseSettings)
+          : decision && decision.layoutType === pendingExplicitLayout
             ? applyRecipeToSettingsById(decision.recipeId, baseSettings)
             : baseSettings;
         if (tp) nextSettings = titlePageSettingsFromClassification(nextSettings, tp);
@@ -2063,11 +2091,26 @@ export default function App() {
     setBreakInstructions(plan.nextBreakInstructions);
     setLayoutType(newLayout);
     setDesignSettings(prev => {
-      const updated = DesignSettingsEngine.updateLayoutSettings(
+      let updated = DesignSettingsEngine.updateLayoutSettings(
         prev,
         { layoutType: newLayout },
         'user'
       );
+      // Two columns: the trained two-column sefer design (Rashi-script
+      // body, bold opening words, split title head, a blank line between
+      // paragraphs) — not a bare two-column page.
+      if (newLayout === 'two_column' && layoutType !== 'two_column') {
+        let rid = 'chassidic-drush';
+        try {
+          rid = twoColumnRecipeFor(classifyForImport(contentUnits, [], {}).decision.recipeId);
+        } catch {
+          /* keep the default */
+        }
+        if (rid === 'chassidic-drush' || rid === 'mussar') {
+          const withDesign = applyRecipeToSettingsById(rid, updated);
+          if (withDesign.layout.layoutType === 'two_column') updated = withDesign;
+        }
+      }
       return plan.clearCustomPageOverrides
         ? DesignSettingsEngine.clearAllCustomLayoutPageOverrides(updated, 'user').settings
         : updated;
@@ -3895,9 +3938,11 @@ export default function App() {
           // handleImportUnits the modal uses. The unsaved-changes guard
           // runs here at import time (the modal path guards at open
           // time instead); both end in the same handler.
-          onImportUnits={(units, title, links, autoLayout) => {
+          onImportUnits={(units, title, links, autoLayout, setup) => {
             runWithUnsavedChangesGuard(t("ייבוא קובץ Word (DOCX) חדש"), () => {
-              handleImportUnits(units, title, links, autoLayout);
+              // the card the user chose on Home travels with the import
+              // (it was dropped here, so every Home card was ignored)
+              handleImportUnits(units, title, links, autoLayout, setup);
             });
           }}
           onOpenProjectFileDialog={handleRequestOpenProjectFile}

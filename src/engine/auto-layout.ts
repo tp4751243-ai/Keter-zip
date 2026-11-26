@@ -1323,11 +1323,29 @@ export function upgradeLegacyTwoColumnSefer(
   if (t && t !== 'halacha' && t !== 'prose') return null;
   let recipeId: string;
   try {
-    recipeId = classifyForImport(units, [], {}).decision.recipeId;
+    recipeId = twoColumnRecipeFor(classifyForImport(units, [], {}).decision.recipeId);
   } catch {
     return null;
   }
+  // (a halachic / Mishnah text keeps its own design; Mussar has its own)
   if (recipeId !== 'chassidic-drush') return null;
   const next = applyRecipeToSettingsById('chassidic-drush', settings);
   return next.layout.layoutType === 'two_column' ? next : null;
+}
+
+/**
+ * The design for a book the user put in TWO COLUMNS (the "two balanced
+ * columns" card): a two-column sefer design the classifier found (Chassidic
+ * / Mussar) is used; a halachic or Mishnah text keeps its own; anything
+ * else gets the trained two-column sefer design (the Kedushat Levi prints:
+ * Rashi-script body, bold opening words, split title head, a blank line
+ * between paragraphs). Before, any file the classifier did not call
+ * Chassidic got a plain, untrained two-column page (the user's Me'or
+ * Einayim: "nothing changed").
+ */
+export function twoColumnRecipeFor(decisionRecipeId: string | undefined): string {
+  if (decisionRecipeId === 'chassidic-drush' || decisionRecipeId === 'mussar') return decisionRecipeId;
+  const t = decisionRecipeId ? seferTypeForRecipe(decisionRecipeId) : undefined;
+  if (t === 'halacha' || t === 'mishnah' || t === 'siddur') return decisionRecipeId!;
+  return 'chassidic-drush';
 }

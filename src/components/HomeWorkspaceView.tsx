@@ -538,7 +538,16 @@ export const HomeWorkspaceView: React.FC<HomeWorkspaceViewProps> = ({
               // v0.9.9 — the chosen setup travels as an explicit 5th
               // argument; nothing is persisted to localStorage first.
               onImportUnits={(units, title, links, autoLayout) =>
-                onImportUnits(units, title, links, autoLayout, homeSetup)
+                // the untouched default card (Vilna) lets the files decide
+                onImportUnits(
+                  units,
+                  title,
+                  links,
+                  autoLayout,
+                  homeSetup.baseLayout === 'rav_text' && !homeSetup.recipeId && !homeSetup.archetypeId && !homeSetup.customLayout
+                    ? undefined
+                    : homeSetup
+                )
               }
               onFileCountChange={setStagedFileCount}
               onStartEmptyInArchetype={handleStartEmptyInSelectedLayout}
